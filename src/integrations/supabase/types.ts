@@ -143,9 +143,11 @@ export type Database = {
           delivery_address: string
           delivery_lat: number | null
           delivery_lng: number | null
+          delivery_otp: string | null
           delivery_partner_id: string | null
           id: string
           notes: string | null
+          payment_method: string
           restaurant_id: string
           status: Database["public"]["Enums"]["order_status"]
           total_amount: number
@@ -157,9 +159,11 @@ export type Database = {
           delivery_address: string
           delivery_lat?: number | null
           delivery_lng?: number | null
+          delivery_otp?: string | null
           delivery_partner_id?: string | null
           id?: string
           notes?: string | null
+          payment_method?: string
           restaurant_id: string
           status?: Database["public"]["Enums"]["order_status"]
           total_amount: number
@@ -171,9 +175,11 @@ export type Database = {
           delivery_address?: string
           delivery_lat?: number | null
           delivery_lng?: number | null
+          delivery_otp?: string | null
           delivery_partner_id?: string | null
           id?: string
           notes?: string | null
+          payment_method?: string
           restaurant_id?: string
           status?: Database["public"]["Enums"]["order_status"]
           total_amount?: number

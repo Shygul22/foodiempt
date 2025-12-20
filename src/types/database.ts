@@ -60,6 +60,8 @@ export interface DeliveryPartner {
   updated_at: string;
 }
 
+export type PaymentMethod = 'cod' | 'gpay';
+
 export interface Order {
   id: string;
   customer_id: string;
@@ -71,6 +73,8 @@ export interface Order {
   delivery_lat: number | null;
   delivery_lng: number | null;
   notes: string | null;
+  payment_method: string; // 'cod' | 'gpay' - stored as string in DB
+  delivery_otp: string | null;
   created_at: string;
   updated_at: string;
 }

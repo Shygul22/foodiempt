@@ -6,7 +6,7 @@ import { Order, OrderStatus } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
-import { ArrowLeft, Package, Clock } from 'lucide-react';
+import { ArrowLeft, Package, Clock, Banknote, Smartphone, Key } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface OrderWithRestaurant extends Order {
@@ -119,14 +119,36 @@ export default function Orders() {
                     <span className="text-sm text-muted-foreground">
                       Order #{order.id.slice(0, 8)}
                     </span>
-                    <span className="font-bold text-primary">
-                      ${Number(order.total_amount).toFixed(2)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {order.payment_method === 'cod' ? (
+                        <span className="flex items-center gap-1 text-xs bg-accent/10 text-accent px-2 py-1 rounded-full">
+                          <Banknote className="w-3 h-3" /> COD
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                          <Smartphone className="w-3 h-3" /> GPay
+                        </span>
+                      )}
+                      <span className="font-bold text-primary">
+                        ${Number(order.total_amount).toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                   {order.delivery_address && (
                     <p className="text-sm text-muted-foreground mt-2 truncate">
                       📍 {order.delivery_address}
                     </p>
+                  )}
+                  {/* Show OTP for active orders */}
+                  {order.delivery_otp && !['delivered', 'cancelled'].includes(order.status) && (
+                    <div className="mt-3 p-3 bg-primary/10 rounded-lg border border-primary/20">
+                      <div className="flex items-center gap-2">
+                        <Key className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-medium text-primary">Delivery OTP:</span>
+                        <span className="font-mono font-bold text-lg text-primary tracking-widest">{order.delivery_otp}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Share this code with your delivery partner</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>

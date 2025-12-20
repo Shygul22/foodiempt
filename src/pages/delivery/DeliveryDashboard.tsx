@@ -6,8 +6,8 @@ import { Order, OrderStatus, DeliveryPartner } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Bike, 
   ArrowLeft, 
@@ -16,7 +16,11 @@ import {
   Package,
   Clock,
   CheckCircle,
-  Phone
+  Phone,
+  Key,
+  Banknote,
+  Smartphone,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -33,6 +37,8 @@ export default function DeliveryDashboard() {
   const [myOrders, setMyOrders] = useState<OrderWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [otpError, setOtpError] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
@@ -153,7 +159,18 @@ export default function DeliveryDashboard() {
       toast.error('Failed to update status');
     } else {
       toast.success('Status updated');
+      setOtpInput('');
+      setOtpError(false);
       fetchData();
+    }
+  };
+
+  const verifyAndDeliver = (order: OrderWithDetails) => {
+    if (otpInput === order.delivery_otp) {
+      updateOrderStatus(order.id, 'delivered');
+    } else {
+      setOtpError(true);
+      toast.error('Invalid OTP. Please check with the customer.');
     }
   };
 
@@ -242,7 +259,20 @@ export default function DeliveryDashboard() {
                     <p className="font-semibold text-lg">{currentOrder.restaurants?.name}</p>
                     <StatusBadge status={currentOrder.status as OrderStatus} />
                   </div>
-                  <p className="font-bold text-primary">${Number(currentOrder.total_amount).toFixed(2)}</p>
+                  <div className="text-right">
+                    <p className="font-bold text-primary">${Number(currentOrder.total_amount).toFixed(2)}</p>
+                    <span className="flex items-center gap-1 text-xs mt-1">
+                      {currentOrder.payment_method === 'cod' ? (
+                        <span className="flex items-center gap-1 bg-accent/10 text-accent px-2 py-1 rounded-full">
+                          <Banknote className="w-3 h-3" /> COD
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-full">
+                          <Smartphone className="w-3 h-3" /> GPay
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid gap-3">
@@ -268,18 +298,48 @@ export default function DeliveryDashboard() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="space-y-3">
                   {currentOrder.status === 'picked_up' && (
-                    <Button className="flex-1" onClick={() => updateOrderStatus(currentOrder.id, 'on_the_way')}>
+                    <Button className="w-full" onClick={() => updateOrderStatus(currentOrder.id, 'on_the_way')}>
                       <Navigation className="w-4 h-4 mr-2" />
                       Start Delivery
                     </Button>
                   )}
                   {currentOrder.status === 'on_the_way' && (
-                    <Button className="flex-1" variant="success" onClick={() => updateOrderStatus(currentOrder.id, 'delivered')}>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Mark Delivered
-                    </Button>
+                    <div className="space-y-3">
+                      <div className="p-3 bg-card rounded-lg border-2 border-primary/20">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Key className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-medium">Enter Customer OTP</span>
+                        </div>
+                        <Input
+                          type="text"
+                          placeholder="Enter 4-digit OTP"
+                          value={otpInput}
+                          onChange={(e) => {
+                            setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                            setOtpError(false);
+                          }}
+                          className={`font-mono text-center text-lg tracking-widest ${otpError ? 'border-destructive' : ''}`}
+                          maxLength={4}
+                        />
+                        {otpError && (
+                          <div className="flex items-center gap-1 text-destructive text-sm mt-2">
+                            <AlertCircle className="w-3 h-3" />
+                            <span>Invalid OTP</span>
+                          </div>
+                        )}
+                      </div>
+                      <Button 
+                        className="w-full" 
+                        variant="success" 
+                        onClick={() => verifyAndDeliver(currentOrder)}
+                        disabled={otpInput.length !== 4}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Verify & Mark Delivered
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -321,7 +381,20 @@ export default function DeliveryDashboard() {
                             {format(new Date(order.created_at), 'h:mm a')}
                           </div>
                         </div>
-                        <p className="font-bold text-primary">${Number(order.total_amount).toFixed(2)}</p>
+                        <div className="text-right">
+                          <p className="font-bold text-primary">${Number(order.total_amount).toFixed(2)}</p>
+                          <span className="flex items-center gap-1 text-xs mt-1 justify-end">
+                            {order.payment_method === 'cod' ? (
+                              <span className="flex items-center gap-1 bg-accent/10 text-accent px-2 py-0.5 rounded-full">
+                                <Banknote className="w-3 h-3" /> COD
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                <Smartphone className="w-3 h-3" /> GPay
+                              </span>
+                            )}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="space-y-2 text-sm mb-4">
