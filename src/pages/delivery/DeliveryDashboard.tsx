@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/StatusBadge';
 import { 
   Bike, 
@@ -20,7 +21,8 @@ import {
   Key,
   Banknote,
   Smartphone,
-  AlertCircle
+  AlertCircle,
+  Shield
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -39,6 +41,14 @@ export default function DeliveryDashboard() {
   const [showRegister, setShowRegister] = useState(false);
   const [otpInput, setOtpInput] = useState('');
   const [otpError, setOtpError] = useState(false);
+  const [pickupOtpInput, setPickupOtpInput] = useState('');
+  const [pickupOtpError, setPickupOtpError] = useState(false);
+  
+  // Phone verification states
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [verificationOtp, setVerificationOtp] = useState('');
+  const [showVerificationInput, setShowVerificationInput] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState('');
 
   useEffect(() => {
     if (!authLoading) {
@@ -87,6 +97,27 @@ export default function DeliveryDashboard() {
     setLoading(false);
   };
 
+  const sendVerificationOtp = () => {
+    if (!phoneNumber || phoneNumber.length < 10) {
+      toast.error('Please enter a valid phone number');
+      return;
+    }
+    
+    // Generate OTP (demo mode - show in app)
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    setGeneratedOtp(otp);
+    setShowVerificationInput(true);
+    toast.success(`Demo OTP: ${otp} (In production, this would be sent via SMS)`);
+  };
+
+  const verifyPhoneOtp = () => {
+    if (verificationOtp === generatedOtp) {
+      registerAsPartner();
+    } else {
+      toast.error('Invalid OTP. Please try again.');
+    }
+  };
+
   const registerAsPartner = async () => {
     const { data, error } = await supabase
       .from('delivery_partners')
@@ -94,6 +125,8 @@ export default function DeliveryDashboard() {
         user_id: user!.id,
         is_available: false,
         vehicle_type: 'Bike',
+        phone: phoneNumber,
+        phone_verified: true,
       })
       .select()
       .single();
@@ -145,7 +178,18 @@ export default function DeliveryDashboard() {
       toast.error('Failed to accept order');
     } else {
       toast.success('Order accepted!');
+      setPickupOtpInput('');
+      setPickupOtpError(false);
       fetchData();
+    }
+  };
+
+  const verifyPickupAndAccept = (order: OrderWithDetails) => {
+    if (pickupOtpInput === order.pickup_otp) {
+      acceptOrder(order.id);
+    } else {
+      setPickupOtpError(true);
+      toast.error('Invalid pickup OTP. Please check with the restaurant.');
     }
   };
 
@@ -194,18 +238,66 @@ export default function DeliveryDashboard() {
           </div>
         </header>
         <div className="container mx-auto px-4 py-8 max-w-md">
-          <Card className="border-0 shadow-lg text-center">
-            <CardContent className="py-12">
-              <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Bike className="w-10 h-10 text-primary" />
+          <Card className="border-0 shadow-lg">
+            <CardContent className="py-8">
+              <div className="text-center mb-6">
+                <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Bike className="w-10 h-10 text-primary" />
+                </div>
+                <h2 className="text-2xl font-bold mb-2">Become a Delivery Partner</h2>
+                <p className="text-muted-foreground">
+                  Earn money delivering food to customers in your area
+                </p>
               </div>
-              <h2 className="text-2xl font-bold mb-2">Become a Delivery Partner</h2>
-              <p className="text-muted-foreground mb-6">
-                Earn money delivering food to customers in your area
-              </p>
-              <Button onClick={registerAsPartner} size="lg">
-                Register as Partner
-              </Button>
+
+              {!showVerificationInput ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="phone"
+                        type="tel"
+                        placeholder="+1 234 567 8900"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <Button onClick={sendVerificationOtp} className="w-full" size="lg">
+                    <Shield className="w-4 h-4 mr-2" />
+                    Send Verification OTP
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3 bg-accent/10 rounded-lg border border-accent/20 text-center">
+                    <p className="text-sm text-accent font-medium">Demo OTP: {generatedOtp}</p>
+                    <p className="text-xs text-muted-foreground mt-1">In production, this would be sent via SMS</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="otp">Enter OTP</Label>
+                    <Input
+                      id="otp"
+                      type="text"
+                      placeholder="Enter 4-digit OTP"
+                      value={verificationOtp}
+                      onChange={(e) => setVerificationOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      className="font-mono text-center text-lg tracking-widest"
+                      maxLength={4}
+                    />
+                  </div>
+                  <Button onClick={verifyPhoneOtp} className="w-full" size="lg" disabled={verificationOtp.length !== 4}>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Verify & Register
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowVerificationInput(false)} className="w-full">
+                    Change Phone Number
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -408,9 +500,39 @@ export default function DeliveryDashboard() {
                         </div>
                       </div>
 
-                      <Button className="w-full" onClick={() => acceptOrder(order.id)}>
-                        Accept Order
-                      </Button>
+                      {/* Pickup OTP verification */}
+                      <div className="space-y-3">
+                        <div className="p-3 bg-card rounded-lg border">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Key className="w-4 h-4 text-accent" />
+                            <span className="text-sm font-medium">Enter Pickup OTP from Restaurant</span>
+                          </div>
+                          <Input
+                            type="text"
+                            placeholder="Enter 4-digit OTP"
+                            value={pickupOtpInput}
+                            onChange={(e) => {
+                              setPickupOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                              setPickupOtpError(false);
+                            }}
+                            className={`font-mono text-center text-lg tracking-widest ${pickupOtpError ? 'border-destructive' : ''}`}
+                            maxLength={4}
+                          />
+                          {pickupOtpError && (
+                            <div className="flex items-center gap-1 text-destructive text-sm mt-2">
+                              <AlertCircle className="w-3 h-3" />
+                              <span>Invalid OTP</span>
+                            </div>
+                          )}
+                        </div>
+                        <Button 
+                          className="w-full" 
+                          onClick={() => verifyPickupAndAccept(order)}
+                          disabled={pickupOtpInput.length !== 4}
+                        >
+                          Verify & Accept Order
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}

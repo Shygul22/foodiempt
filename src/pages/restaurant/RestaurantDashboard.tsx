@@ -21,7 +21,10 @@ import {
   Clock,
   Edit,
   Trash2,
-  Power
+  Power,
+  Key,
+  Banknote,
+  Smartphone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -455,6 +458,31 @@ export default function RestaurantDashboard() {
                             </Button>
                           )}
                         </div>
+                      </div>
+
+                      {/* Show Pickup OTP when ready for pickup */}
+                      {order.status === 'ready_for_pickup' && order.pickup_otp && (
+                        <div className="mt-3 p-3 bg-accent/10 rounded-lg border border-accent/20">
+                          <div className="flex items-center gap-2">
+                            <Key className="w-4 h-4 text-accent" />
+                            <span className="text-sm font-medium text-accent">Pickup OTP:</span>
+                            <span className="font-mono font-bold text-lg text-accent tracking-widest">{order.pickup_otp}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">Share this code with the delivery partner for order handoff</p>
+                        </div>
+                      )}
+
+                      {/* Payment method badge */}
+                      <div className="flex items-center gap-2 mt-2">
+                        {order.payment_method === 'cod' ? (
+                          <span className="flex items-center gap-1 text-xs bg-accent/10 text-accent px-2 py-1 rounded-full">
+                            <Banknote className="w-3 h-3" /> Cash on Delivery
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                            <Smartphone className="w-3 h-3" /> Google Pay
+                          </span>
+                        )}
                       </div>
 
                       {order.delivery_address && (
