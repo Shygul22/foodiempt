@@ -62,7 +62,7 @@ export default function AdminDashboard() {
       supabase.from('restaurants').select('*').order('created_at', { ascending: false }),
       supabase
         .from('orders')
-        .select('*, restaurants(name), profiles(full_name, email)')
+        .select('*, restaurants(name)')
         .order('created_at', { ascending: false })
         .limit(50),
     ]);
@@ -335,10 +335,7 @@ export default function AdminDashboard() {
                           </td>
                           <td className="py-3 px-2">{order.restaurants?.name || 'Unknown'}</td>
                           <td className="py-3 px-2">
-                            <div>
-                              <p className="font-medium">{order.profiles?.full_name || 'Unknown'}</p>
-                              <p className="text-sm text-muted-foreground">{order.profiles?.email}</p>
-                            </div>
+                            <p className="font-mono text-sm">{order.customer_id.slice(0, 8)}...</p>
                           </td>
                           <td className="py-3 px-2">
                             <StatusBadge status={order.status as OrderStatus} />
