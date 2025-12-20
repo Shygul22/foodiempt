@@ -56,6 +56,9 @@ export interface DeliveryPartner {
   current_lat: number | null;
   current_lng: number | null;
   vehicle_type: string | null;
+  phone: string | null;
+  phone_verified: boolean;
+  verification_otp: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -73,8 +76,9 @@ export interface Order {
   delivery_lat: number | null;
   delivery_lng: number | null;
   notes: string | null;
-  payment_method: string; // 'cod' | 'gpay' - stored as string in DB
+  payment_method: string;
   delivery_otp: string | null;
+  pickup_otp: string | null;
   created_at: string;
   updated_at: string;
 }

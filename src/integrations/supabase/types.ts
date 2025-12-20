@@ -21,9 +21,12 @@ export type Database = {
           current_lng: number | null
           id: string
           is_available: boolean
+          phone: string | null
+          phone_verified: boolean
           updated_at: string
           user_id: string
           vehicle_type: string | null
+          verification_otp: string | null
         }
         Insert: {
           created_at?: string
@@ -31,9 +34,12 @@ export type Database = {
           current_lng?: number | null
           id?: string
           is_available?: boolean
+          phone?: string | null
+          phone_verified?: boolean
           updated_at?: string
           user_id: string
           vehicle_type?: string | null
+          verification_otp?: string | null
         }
         Update: {
           created_at?: string
@@ -41,9 +47,12 @@ export type Database = {
           current_lng?: number | null
           id?: string
           is_available?: boolean
+          phone?: string | null
+          phone_verified?: boolean
           updated_at?: string
           user_id?: string
           vehicle_type?: string | null
+          verification_otp?: string | null
         }
         Relationships: []
       }
@@ -148,6 +157,7 @@ export type Database = {
           id: string
           notes: string | null
           payment_method: string
+          pickup_otp: string | null
           restaurant_id: string
           status: Database["public"]["Enums"]["order_status"]
           total_amount: number
@@ -164,6 +174,7 @@ export type Database = {
           id?: string
           notes?: string | null
           payment_method?: string
+          pickup_otp?: string | null
           restaurant_id: string
           status?: Database["public"]["Enums"]["order_status"]
           total_amount: number
@@ -180,6 +191,7 @@ export type Database = {
           id?: string
           notes?: string | null
           payment_method?: string
+          pickup_otp?: string | null
           restaurant_id?: string
           status?: Database["public"]["Enums"]["order_status"]
           total_amount?: number
