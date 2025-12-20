@@ -8,15 +8,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
   ArrowLeft, 
   Minus, 
   Plus, 
   Trash2, 
   ShoppingBag,
-  MapPin 
+  MapPin,
+  Banknote,
+  Smartphone
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+type PaymentMethod = 'cod' | 'gpay';
 
 export default function Cart() {
   const { user } = useAuth();
@@ -24,6 +29,7 @@ export default function Cart() {
   const { items, restaurantId, updateQuantity, removeItem, clearCart, getTotalAmount } = useCartStore();
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
   const [loading, setLoading] = useState(false);
 
   const handleCheckout = async () => {
@@ -56,6 +62,7 @@ export default function Cart() {
           delivery_address: deliveryAddress,
           notes: notes || null,
           status: 'pending',
+          payment_method: paymentMethod,
         })
         .select()
         .single();
@@ -207,6 +214,33 @@ export default function Cart() {
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
                   />
+                </div>
+
+                {/* Payment Method */}
+                <div className="space-y-3">
+                  <Label>Payment Method</Label>
+                  <RadioGroup value={paymentMethod} onValueChange={(val) => setPaymentMethod(val as PaymentMethod)}>
+                    <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer">
+                      <RadioGroupItem value="cod" id="cod" />
+                      <Label htmlFor="cod" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Banknote className="w-5 h-5 text-accent" />
+                        <div>
+                          <p className="font-medium">Cash on Delivery</p>
+                          <p className="text-xs text-muted-foreground">Pay when your order arrives</p>
+                        </div>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer">
+                      <RadioGroupItem value="gpay" id="gpay" />
+                      <Label htmlFor="gpay" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Smartphone className="w-5 h-5 text-primary" />
+                        <div>
+                          <p className="font-medium">Google Pay</p>
+                          <p className="text-xs text-muted-foreground">Pay via GPay at delivery</p>
+                        </div>
+                      </Label>
+                    </div>
+                  </RadioGroup>
                 </div>
 
                 <div className="border-t pt-4 space-y-2">
