@@ -41,8 +41,8 @@ export default function DeliveryDashboard() {
   const [showRegister, setShowRegister] = useState(false);
   const [otpInput, setOtpInput] = useState('');
   const [otpError, setOtpError] = useState(false);
-  const [pickupOtpInput, setPickupOtpInput] = useState('');
-  const [pickupOtpError, setPickupOtpError] = useState(false);
+  const [pickupOtpInputs, setPickupOtpInputs] = useState<Record<string, string>>({});
+  const [pickupOtpErrors, setPickupOtpErrors] = useState<Record<string, boolean>>({});
   
   // Phone verification states
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -178,17 +178,18 @@ export default function DeliveryDashboard() {
       toast.error('Failed to accept order');
     } else {
       toast.success('Order accepted!');
-      setPickupOtpInput('');
-      setPickupOtpError(false);
+      setPickupOtpInputs(prev => ({ ...prev, [orderId]: '' }));
+      setPickupOtpErrors(prev => ({ ...prev, [orderId]: false }));
       fetchData();
     }
   };
 
   const verifyPickupAndAccept = (order: OrderWithDetails) => {
-    if (pickupOtpInput === order.pickup_otp) {
+    const otpValue = pickupOtpInputs[order.id] || '';
+    if (otpValue === order.pickup_otp) {
       acceptOrder(order.id);
     } else {
-      setPickupOtpError(true);
+      setPickupOtpErrors(prev => ({ ...prev, [order.id]: true }));
       toast.error('Invalid pickup OTP. Please check with the restaurant.');
     }
   };
@@ -510,15 +511,15 @@ export default function DeliveryDashboard() {
                           <Input
                             type="text"
                             placeholder="Enter 4-digit OTP"
-                            value={pickupOtpInput}
+                            value={pickupOtpInputs[order.id] || ''}
                             onChange={(e) => {
-                              setPickupOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4));
-                              setPickupOtpError(false);
+                              setPickupOtpInputs(prev => ({ ...prev, [order.id]: e.target.value.replace(/\D/g, '').slice(0, 4) }));
+                              setPickupOtpErrors(prev => ({ ...prev, [order.id]: false }));
                             }}
-                            className={`font-mono text-center text-lg tracking-widest ${pickupOtpError ? 'border-destructive' : ''}`}
+                            className={`font-mono text-center text-lg tracking-widest ${pickupOtpErrors[order.id] ? 'border-destructive' : ''}`}
                             maxLength={4}
                           />
-                          {pickupOtpError && (
+                          {pickupOtpErrors[order.id] && (
                             <div className="flex items-center gap-1 text-destructive text-sm mt-2">
                               <AlertCircle className="w-3 h-3" />
                               <span>Invalid OTP</span>
@@ -528,7 +529,7 @@ export default function DeliveryDashboard() {
                         <Button 
                           className="w-full" 
                           onClick={() => verifyPickupAndAccept(order)}
-                          disabled={pickupOtpInput.length !== 4}
+                          disabled={(pickupOtpInputs[order.id] || '').length !== 4}
                         >
                           Verify & Accept Order
                         </Button>
