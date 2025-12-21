@@ -159,7 +159,7 @@ export default function RestaurantDashboard() {
       
       setRestaurant(data);
       setShowCreateRestaurant(false);
-      toast.success('Restaurant created! Awaiting admin verification.');
+      toast.success('Shop created! Awaiting admin verification.');
     }
   };
 
@@ -288,16 +288,16 @@ export default function RestaurantDashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Store className="w-5 h-5" />
-                Register Your Restaurant
+                Register Your Shop
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Restaurant Name *</Label>
+                <Label>Shop Name *</Label>
                 <Input
                   value={restaurantForm.name}
                   onChange={(e) => setRestaurantForm({ ...restaurantForm, name: e.target.value })}
-                  placeholder="My Restaurant"
+                  placeholder="My Shop"
                 />
               </div>
               <div className="space-y-2">
@@ -305,7 +305,7 @@ export default function RestaurantDashboard() {
                 <Textarea
                   value={restaurantForm.description}
                   onChange={(e) => setRestaurantForm({ ...restaurantForm, description: e.target.value })}
-                  placeholder="Tell customers about your restaurant..."
+                  placeholder="Tell customers about your shop..."
                 />
               </div>
               <div className="space-y-2">
@@ -343,7 +343,7 @@ export default function RestaurantDashboard() {
                 />
               </div>
               <Button className="w-full" onClick={createRestaurant}>
-                Register Restaurant
+                Register Shop
               </Button>
             </CardContent>
           </Card>
@@ -429,13 +429,13 @@ export default function RestaurantDashboard() {
                       <div className="space-y-1 mb-3">
                         {order.order_items.map((item, idx) => (
                           <p key={idx} className="text-sm">
-                            {item.quantity}x {item.menu_items?.name || 'Unknown'} - ${(Number(item.unit_price) * item.quantity).toFixed(2)}
+                            {item.quantity}x {item.menu_items?.name || 'Unknown'} - ₹{(Number(item.unit_price) * item.quantity).toFixed(2)}
                           </p>
                         ))}
                       </div>
 
                       <div className="flex items-center justify-between pt-3 border-t border-border">
-                        <p className="font-bold">${Number(order.total_amount).toFixed(2)}</p>
+                        <p className="font-bold">₹{Number(order.total_amount).toFixed(2)}</p>
                         <div className="flex gap-2">
                           {order.status === 'pending' && (
                             <>
@@ -468,7 +468,7 @@ export default function RestaurantDashboard() {
                             <span className="text-sm font-medium text-accent">Pickup OTP:</span>
                             <span className="font-mono font-bold text-lg text-accent tracking-widest">{order.pickup_otp}</span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">Share this code with the delivery partner for order handoff</p>
+                          <span className="text-sm text-muted-foreground">Share this code with the delivery partner for order handoff</span>
                         </div>
                       )}
 
@@ -580,7 +580,7 @@ export default function RestaurantDashboard() {
                             )}
                           </div>
                           {item.category && <p className="text-sm text-muted-foreground">{item.category}</p>}
-                          <p className="text-primary font-bold">${Number(item.price).toFixed(2)}</p>
+                          <p className="text-primary font-bold">₹{Number(item.price).toFixed(2)}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Switch

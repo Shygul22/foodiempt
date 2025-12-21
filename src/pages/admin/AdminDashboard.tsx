@@ -113,7 +113,7 @@ export default function AdminDashboard() {
     if (error) {
       toast.error('Failed to update verification status');
     } else {
-      toast.success(isVerified ? 'Restaurant verified' : 'Verification removed');
+      toast.success(isVerified ? 'Shop verified' : 'Verification removed');
       fetchData();
     }
   };
@@ -173,7 +173,7 @@ export default function AdminDashboard() {
                   <Store className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Restaurants</p>
+                  <p className="text-sm text-muted-foreground">Shops</p>
                   <p className="text-2xl font-bold">{stats.totalRestaurants}</p>
                 </div>
               </div>
@@ -213,7 +213,7 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Revenue</p>
-                  <p className="text-2xl font-bold">${stats.totalRevenue.toFixed(0)}</p>
+                  <p className="text-2xl font-bold">₹{stats.totalRevenue.toFixed(0)}</p>
                 </div>
               </div>
             </CardContent>
@@ -222,7 +222,7 @@ export default function AdminDashboard() {
 
         <Tabs defaultValue="restaurants" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="restaurants">Restaurants</TabsTrigger>
+            <TabsTrigger value="restaurants">Shops</TabsTrigger>
             <TabsTrigger value="orders">All Orders</TabsTrigger>
           </TabsList>
 
@@ -231,7 +231,7 @@ export default function AdminDashboard() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Store className="w-5 h-5" />
-                  Restaurant Management
+                  Shop Management
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -239,7 +239,7 @@ export default function AdminDashboard() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Restaurant</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Shop</th>
                         <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Status</th>
                         <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Verified</th>
                         <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Commission</th>
@@ -340,7 +340,7 @@ export default function AdminDashboard() {
                           <td className="py-3 px-2">
                             <StatusBadge status={order.status as OrderStatus} />
                           </td>
-                          <td className="py-3 px-2 font-medium">${Number(order.total_amount).toFixed(2)}</td>
+                          <td className="py-3 px-2 font-medium">₹{Number(order.total_amount).toFixed(2)}</td>
                           <td className="py-3 px-2 text-sm text-muted-foreground">
                             {format(new Date(order.created_at), 'MMM d, h:mm a')}
                           </td>

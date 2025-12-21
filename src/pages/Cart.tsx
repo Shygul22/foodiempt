@@ -112,7 +112,7 @@ export default function Cart() {
           <h2 className="text-2xl font-bold mb-2">Your cart is empty</h2>
           <p className="text-muted-foreground mb-6">Add some delicious items to get started</p>
           <Link to="/">
-            <Button variant="hero">Browse Restaurants</Button>
+            <Button variant="hero">Browse Shops</Button>
           </Link>
         </div>
       </div>
@@ -149,7 +149,7 @@ export default function Cart() {
                     )}
                     <div className="flex-1">
                       <h3 className="font-semibold">{item.menuItem.name}</h3>
-                      <p className="text-primary font-bold">${Number(item.menuItem.price).toFixed(2)}</p>
+                      <p className="text-primary font-bold">₹{Number(item.menuItem.price).toFixed(2)}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -246,15 +246,15 @@ export default function Cart() {
                 <div className="border-t pt-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>${getTotalAmount().toFixed(2)}</span>
+                    <span>₹{getTotalAmount().toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Delivery Fee</span>
-                    <span>$2.99</span>
+                    <span>₹49</span>
                   </div>
                   <div className="flex justify-between font-bold text-lg pt-2 border-t">
                     <span>Total</span>
-                    <span className="text-primary">${(getTotalAmount() + 2.99).toFixed(2)}</span>
+                    <span className="text-primary">₹{(getTotalAmount() + 49).toFixed(2)}</span>
                   </div>
                 </div>
 

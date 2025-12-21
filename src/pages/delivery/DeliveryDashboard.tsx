@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Bike, 
   ArrowLeft, 
@@ -22,7 +23,11 @@ import {
   Banknote,
   Smartphone,
   AlertCircle,
-  Shield
+  Shield,
+  History,
+  Wallet,
+  IndianRupee,
+  TrendingUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -37,6 +42,8 @@ export default function DeliveryDashboard() {
   const [deliveryPartner, setDeliveryPartner] = useState<DeliveryPartner | null>(null);
   const [availableOrders, setAvailableOrders] = useState<OrderWithDetails[]>([]);
   const [myOrders, setMyOrders] = useState<OrderWithDetails[]>([]);
+  const [orderHistory, setOrderHistory] = useState<OrderWithDetails[]>([]);
+  const [earnings, setEarnings] = useState({ today: 0, week: 0, total: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
   const [otpInput, setOtpInput] = useState('');
@@ -90,6 +97,41 @@ export default function DeliveryDashboard() {
         .order('created_at', { ascending: false });
 
       if (myOrdersData) setMyOrders(myOrdersData);
+
+      // Fetch order history (completed/cancelled)
+      const { data: historyData } = await supabase
+        .from('orders')
+        .select('*, restaurants(name, address, phone)')
+        .eq('delivery_partner_id', partnerData.id)
+        .in('status', ['delivered', 'cancelled'])
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (historyData) setOrderHistory(historyData);
+
+      // Calculate earnings
+      const deliveredOrders = historyData?.filter(o => o.status === 'delivered') || [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+
+      const deliveryFee = 30; // Fixed delivery fee per order
+      const todayEarnings = deliveredOrders
+        .filter(o => new Date(o.created_at) >= today)
+        .length * deliveryFee;
+      const weekEarnings = deliveredOrders
+        .filter(o => new Date(o.created_at) >= weekAgo)
+        .length * deliveryFee;
+      const totalEarnings = deliveredOrders.length * deliveryFee;
+      const pendingSettlement = Math.floor(totalEarnings * 0.2); // 20% pending
+
+      setEarnings({
+        today: todayEarnings,
+        week: weekEarnings,
+        total: totalEarnings,
+        pending: pendingSettlement
+      });
     } else {
       setShowRegister(true);
     }
@@ -336,223 +378,378 @@ export default function DeliveryDashboard() {
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        {/* Current Delivery */}
-        {currentOrder && (
-          <Card className="border-0 shadow-lg mb-6 bg-gradient-to-r from-primary/5 to-accent/5">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-primary" />
-                Current Delivery
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-lg">{currentOrder.restaurants?.name}</p>
-                    <StatusBadge status={currentOrder.status as OrderStatus} />
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-primary">${Number(currentOrder.total_amount).toFixed(2)}</p>
-                    <span className="flex items-center gap-1 text-xs mt-1">
-                      {currentOrder.payment_method === 'cod' ? (
-                        <span className="flex items-center gap-1 bg-accent/10 text-accent px-2 py-1 rounded-full">
-                          <Banknote className="w-3 h-3" /> COD
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-full">
-                          <Smartphone className="w-3 h-3" /> GPay
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </div>
+        <Tabs defaultValue="active" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="active" className="gap-2">
+              <Package className="w-4 h-4" />
+              Active
+            </TabsTrigger>
+            <TabsTrigger value="history" className="gap-2">
+              <History className="w-4 h-4" />
+              History
+            </TabsTrigger>
+            <TabsTrigger value="earnings" className="gap-2">
+              <Wallet className="w-4 h-4" />
+              Earnings
+            </TabsTrigger>
+          </TabsList>
 
-                <div className="grid gap-3">
-                  <div className="flex items-start gap-3 p-3 bg-card rounded-lg">
-                    <MapPin className="w-5 h-5 text-accent mt-0.5" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pickup from</p>
-                      <p className="font-medium">{currentOrder.restaurants?.address}</p>
-                      {currentOrder.restaurants?.phone && (
-                        <a href={`tel:${currentOrder.restaurants.phone}`} className="flex items-center gap-1 text-primary text-sm mt-1">
-                          <Phone className="w-3 h-3" />
-                          {currentOrder.restaurants.phone}
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 bg-card rounded-lg">
-                    <Navigation className="w-5 h-5 text-primary mt-0.5" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Deliver to</p>
-                      <p className="font-medium">{currentOrder.delivery_address}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {currentOrder.status === 'picked_up' && (
-                    <Button className="w-full" onClick={() => updateOrderStatus(currentOrder.id, 'on_the_way')}>
-                      <Navigation className="w-4 h-4 mr-2" />
-                      Start Delivery
-                    </Button>
-                  )}
-                  {currentOrder.status === 'on_the_way' && (
-                    <div className="space-y-3">
-                      <div className="p-3 bg-card rounded-lg border-2 border-primary/20">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Key className="w-4 h-4 text-primary" />
-                          <span className="text-sm font-medium">Enter Customer OTP</span>
-                        </div>
-                        <Input
-                          type="text"
-                          placeholder="Enter 4-digit OTP"
-                          value={otpInput}
-                          onChange={(e) => {
-                            setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4));
-                            setOtpError(false);
-                          }}
-                          className={`font-mono text-center text-lg tracking-widest ${otpError ? 'border-destructive' : ''}`}
-                          maxLength={4}
-                        />
-                        {otpError && (
-                          <div className="flex items-center gap-1 text-destructive text-sm mt-2">
-                            <AlertCircle className="w-3 h-3" />
-                            <span>Invalid OTP</span>
-                          </div>
-                        )}
+          <TabsContent value="active" className="space-y-6">
+            {/* Current Delivery */}
+            {currentOrder && (
+              <Card className="border-0 shadow-lg bg-gradient-to-r from-primary/5 to-accent/5">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary" />
+                    Current Delivery
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-semibold text-lg">{currentOrder.restaurants?.name}</p>
+                        <StatusBadge status={currentOrder.status as OrderStatus} />
                       </div>
-                      <Button 
-                        className="w-full" 
-                        variant="success" 
-                        onClick={() => verifyAndDeliver(currentOrder)}
-                        disabled={otpInput.length !== 4}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Verify & Mark Delivered
-                      </Button>
+                      <div className="text-right">
+                        <p className="font-bold text-primary">₹{Number(currentOrder.total_amount).toFixed(2)}</p>
+                        <span className="flex items-center gap-1 text-xs mt-1">
+                          {currentOrder.payment_method === 'cod' ? (
+                            <span className="flex items-center gap-1 bg-accent/10 text-accent px-2 py-1 rounded-full">
+                              <Banknote className="w-3 h-3" /> COD
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-full">
+                              <Smartphone className="w-3 h-3" /> GPay
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Available Orders */}
-        {deliveryPartner?.is_available && !currentOrder && (
-          <div className="space-y-4">
+                    <div className="grid gap-3">
+                      <div className="flex items-start gap-3 p-3 bg-card rounded-lg">
+                        <MapPin className="w-5 h-5 text-accent mt-0.5" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Pickup from</p>
+                          <p className="font-medium">{currentOrder.restaurants?.address}</p>
+                          {currentOrder.restaurants?.phone && (
+                            <a href={`tel:${currentOrder.restaurants.phone}`} className="flex items-center gap-1 text-primary text-sm mt-1">
+                              <Phone className="w-3 h-3" />
+                              {currentOrder.restaurants.phone}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 bg-card rounded-lg">
+                        <Navigation className="w-5 h-5 text-primary mt-0.5" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Deliver to</p>
+                          <p className="font-medium">{currentOrder.delivery_address}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {currentOrder.status === 'picked_up' && (
+                        <Button className="w-full" onClick={() => updateOrderStatus(currentOrder.id, 'on_the_way')}>
+                          <Navigation className="w-4 h-4 mr-2" />
+                          Start Delivery
+                        </Button>
+                      )}
+                      {currentOrder.status === 'on_the_way' && (
+                        <div className="space-y-3">
+                          <div className="p-3 bg-card rounded-lg border-2 border-primary/20">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Key className="w-4 h-4 text-primary" />
+                              <span className="text-sm font-medium">Enter Customer OTP</span>
+                            </div>
+                            <Input
+                              type="text"
+                              placeholder="Enter 4-digit OTP"
+                              value={otpInput}
+                              onChange={(e) => {
+                                setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                                setOtpError(false);
+                              }}
+                              className={`font-mono text-center text-lg tracking-widest ${otpError ? 'border-destructive' : ''}`}
+                              maxLength={4}
+                            />
+                            {otpError && (
+                              <div className="flex items-center gap-1 text-destructive text-sm mt-2">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Invalid OTP</span>
+                              </div>
+                            )}
+                          </div>
+                          <Button 
+                            className="w-full" 
+                            variant="success" 
+                            onClick={() => verifyAndDeliver(currentOrder)}
+                            disabled={otpInput.length !== 4}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Verify & Mark Delivered
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Available Orders */}
+            {deliveryPartner?.is_available && !currentOrder && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Package className="w-5 h-5" />
+                  Available Orders
+                  {availableOrders.length > 0 && (
+                    <span className="w-6 h-6 bg-primary text-primary-foreground text-sm rounded-full flex items-center justify-center">
+                      {availableOrders.length}
+                    </span>
+                  )}
+                </h2>
+
+                {availableOrders.length === 0 ? (
+                  <Card className="border-0 shadow-sm">
+                    <CardContent className="py-12 text-center">
+                      <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                      <p className="text-muted-foreground">No orders available right now</p>
+                      <p className="text-sm text-muted-foreground mt-1">New orders will appear here automatically</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4">
+                    {availableOrders.map((order) => (
+                      <Card key={order.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <p className="font-semibold">{order.restaurants?.name}</p>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                                <Clock className="w-4 h-4" />
+                                {format(new Date(order.created_at), 'h:mm a')}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-primary">₹{Number(order.total_amount).toFixed(2)}</p>
+                              <span className="flex items-center gap-1 text-xs mt-1 justify-end">
+                                {order.payment_method === 'cod' ? (
+                                  <span className="flex items-center gap-1 bg-accent/10 text-accent px-2 py-0.5 rounded-full">
+                                    <Banknote className="w-3 h-3" /> COD
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                    <Smartphone className="w-3 h-3" /> GPay
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2 text-sm mb-4">
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-accent mt-0.5" />
+                              <span className="text-muted-foreground">{order.restaurants?.address}</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <Navigation className="w-4 h-4 text-primary mt-0.5" />
+                              <span className="text-muted-foreground">{order.delivery_address}</span>
+                            </div>
+                          </div>
+
+                          {/* Pickup OTP verification */}
+                          <div className="space-y-3">
+                            <div className="p-3 bg-card rounded-lg border">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Key className="w-4 h-4 text-accent" />
+                                <span className="text-sm font-medium">Enter Pickup OTP from Shop</span>
+                              </div>
+                              <Input
+                                type="text"
+                                placeholder="Enter 4-digit OTP"
+                                value={pickupOtpInputs[order.id] || ''}
+                                onChange={(e) => {
+                                  setPickupOtpInputs(prev => ({ ...prev, [order.id]: e.target.value.replace(/\D/g, '').slice(0, 4) }));
+                                  setPickupOtpErrors(prev => ({ ...prev, [order.id]: false }));
+                                }}
+                                className={`font-mono text-center text-lg tracking-widest ${pickupOtpErrors[order.id] ? 'border-destructive' : ''}`}
+                                maxLength={4}
+                              />
+                              {pickupOtpErrors[order.id] && (
+                                <div className="flex items-center gap-1 text-destructive text-sm mt-2">
+                                  <AlertCircle className="w-3 h-3" />
+                                  <span>Invalid OTP</span>
+                                </div>
+                              )}
+                            </div>
+                            <Button 
+                              className="w-full" 
+                              onClick={() => verifyPickupAndAccept(order)}
+                              disabled={(pickupOtpInputs[order.id] || '').length !== 4}
+                            >
+                              Verify & Accept Order
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Offline State */}
+            {!deliveryPartner?.is_available && !currentOrder && (
+              <Card className="border-0 shadow-sm">
+                <CardContent className="py-16 text-center">
+                  <Bike className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">You're Offline</h3>
+                  <p className="text-muted-foreground mb-4">Go online to start receiving delivery requests</p>
+                  <Button onClick={toggleAvailability}>Go Online</Button>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="history" className="space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Package className="w-5 h-5" />
-              Available Orders
-              {availableOrders.length > 0 && (
-                <span className="w-6 h-6 bg-primary text-primary-foreground text-sm rounded-full flex items-center justify-center">
-                  {availableOrders.length}
-                </span>
-              )}
+              <History className="w-5 h-5" />
+              Order History
             </h2>
 
-            {availableOrders.length === 0 ? (
+            {orderHistory.length === 0 ? (
               <Card className="border-0 shadow-sm">
                 <CardContent className="py-12 text-center">
-                  <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No orders available right now</p>
-                  <p className="text-sm text-muted-foreground mt-1">New orders will appear here automatically</p>
+                  <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground">No completed deliveries yet</p>
+                  <p className="text-sm text-muted-foreground mt-1">Your delivery history will appear here</p>
                 </CardContent>
               </Card>
             ) : (
               <div className="grid gap-4">
-                {availableOrders.map((order) => (
-                  <Card key={order.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+                {orderHistory.map((order) => (
+                  <Card key={order.id} className="border-0 shadow-sm">
                     <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-start justify-between mb-2">
                         <div>
                           <p className="font-semibold">{order.restaurants?.name}</p>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                             <Clock className="w-4 h-4" />
-                            {format(new Date(order.created_at), 'h:mm a')}
+                            {format(new Date(order.created_at), 'MMM d, h:mm a')}
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-primary">${Number(order.total_amount).toFixed(2)}</p>
-                          <span className="flex items-center gap-1 text-xs mt-1 justify-end">
-                            {order.payment_method === 'cod' ? (
-                              <span className="flex items-center gap-1 bg-accent/10 text-accent px-2 py-0.5 rounded-full">
-                                <Banknote className="w-3 h-3" /> COD
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                <Smartphone className="w-3 h-3" /> GPay
-                              </span>
-                            )}
-                          </span>
+                          <StatusBadge status={order.status as OrderStatus} />
+                          <p className="font-bold text-primary mt-1">₹{Number(order.total_amount).toFixed(2)}</p>
                         </div>
                       </div>
-
-                      <div className="space-y-2 text-sm mb-4">
-                        <div className="flex items-start gap-2">
-                          <MapPin className="w-4 h-4 text-accent mt-0.5" />
-                          <span className="text-muted-foreground">{order.restaurants?.address}</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <Navigation className="w-4 h-4 text-primary mt-0.5" />
-                          <span className="text-muted-foreground">{order.delivery_address}</span>
-                        </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Navigation className="w-4 h-4" />
+                        <span className="truncate">{order.delivery_address}</span>
                       </div>
-
-                      {/* Pickup OTP verification */}
-                      <div className="space-y-3">
-                        <div className="p-3 bg-card rounded-lg border">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Key className="w-4 h-4 text-accent" />
-                            <span className="text-sm font-medium">Enter Pickup OTP from Restaurant</span>
-                          </div>
-                          <Input
-                            type="text"
-                            placeholder="Enter 4-digit OTP"
-                            value={pickupOtpInputs[order.id] || ''}
-                            onChange={(e) => {
-                              setPickupOtpInputs(prev => ({ ...prev, [order.id]: e.target.value.replace(/\D/g, '').slice(0, 4) }));
-                              setPickupOtpErrors(prev => ({ ...prev, [order.id]: false }));
-                            }}
-                            className={`font-mono text-center text-lg tracking-widest ${pickupOtpErrors[order.id] ? 'border-destructive' : ''}`}
-                            maxLength={4}
-                          />
-                          {pickupOtpErrors[order.id] && (
-                            <div className="flex items-center gap-1 text-destructive text-sm mt-2">
-                              <AlertCircle className="w-3 h-3" />
-                              <span>Invalid OTP</span>
-                            </div>
-                          )}
+                      {order.status === 'delivered' && (
+                        <div className="mt-2 flex items-center gap-1 text-accent text-sm">
+                          <IndianRupee className="w-3 h-3" />
+                          <span>Earned: ₹30</span>
                         </div>
-                        <Button 
-                          className="w-full" 
-                          onClick={() => verifyPickupAndAccept(order)}
-                          disabled={(pickupOtpInputs[order.id] || '').length !== 4}
-                        >
-                          Verify & Accept Order
-                        </Button>
-                      </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
               </div>
             )}
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Offline State */}
-        {!deliveryPartner?.is_available && !currentOrder && (
-          <Card className="border-0 shadow-sm">
-            <CardContent className="py-16 text-center">
-              <Bike className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">You're Offline</h3>
-              <p className="text-muted-foreground mb-4">Go online to start receiving delivery requests</p>
-              <Button onClick={toggleAvailability}>Go Online</Button>
-            </CardContent>
-          </Card>
-        )}
+          <TabsContent value="earnings" className="space-y-6">
+            {/* Earnings Stats */}
+            <div className="grid grid-cols-2 gap-4">
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                      <IndianRupee className="w-5 h-5 text-accent" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Today</p>
+                      <p className="text-xl font-bold">₹{earnings.today}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">This Week</p>
+                      <p className="text-xl font-bold">₹{earnings.week}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-status-delivered/10 flex items-center justify-center">
+                      <Wallet className="w-5 h-5 text-status-delivered" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Earned</p>
+                      <p className="text-xl font-bold">₹{earnings.total}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-status-pending/10 flex items-center justify-center">
+                      <Clock className="w-5 h-5 text-status-pending" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Pending</p>
+                      <p className="text-xl font-bold">₹{earnings.pending}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Settlement Info */}
+            <Card className="border-0 shadow-md bg-gradient-to-r from-primary/5 to-accent/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="w-5 h-5 text-primary" />
+                  Settlement Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center p-3 bg-card rounded-lg">
+                    <span className="text-muted-foreground">Delivery fee per order</span>
+                    <span className="font-bold">₹30</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-card rounded-lg">
+                    <span className="text-muted-foreground">Total deliveries</span>
+                    <span className="font-bold">{orderHistory.filter(o => o.status === 'delivered').length}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-card rounded-lg">
+                    <span className="text-muted-foreground">Settlement cycle</span>
+                    <span className="font-bold">Weekly</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center mt-4">
+                    Settlements are processed every Monday to your registered bank account
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
