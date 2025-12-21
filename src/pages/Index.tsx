@@ -87,7 +87,7 @@ export default function Index() {
                     <Link to="/restaurant">
                       <Button variant="ghost" size="sm" className="gap-2">
                         <Store className="w-4 h-4" />
-                        <span className="hidden sm:inline">Restaurant</span>
+                        <span className="hidden sm:inline">My Shop</span>
                       </Button>
                     </Link>
                   )}
@@ -139,7 +139,7 @@ export default function Index() {
               <span className="text-primary">delivered fast</span>
             </h1>
             <p className="text-lg text-muted-foreground mb-8">
-              Order from your favorite local restaurants and get it delivered to your doorstep.
+              Order from your favorite local shops and get it delivered to your doorstep.
             </p>
             
             {/* Search Bar */}
@@ -147,7 +147,7 @@ export default function Index() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search restaurants or cuisines..."
+                placeholder="Search shops or cuisines..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-12 h-14 text-lg rounded-xl shadow-lg border-0 bg-card"
@@ -165,10 +165,10 @@ export default function Index() {
       <section className="py-12">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold text-foreground">Nearby Restaurants</h2>
+            <h2 className="text-2xl font-bold text-foreground">Nearby Shops</h2>
             {filteredRestaurants.length > 0 && (
               <span className="text-sm text-muted-foreground">
-                {filteredRestaurants.length} restaurants
+                {filteredRestaurants.length} shops
               </span>
             )}
           </div>
@@ -190,9 +190,9 @@ export default function Index() {
               <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
                 <Utensils className="w-10 h-10 text-muted-foreground" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">No restaurants found</h3>
+              <h3 className="text-xl font-semibold text-foreground mb-2">No shops found</h3>
               <p className="text-muted-foreground">
-                {searchQuery ? 'Try a different search term' : 'Restaurants will appear here once verified'}
+                {searchQuery ? 'Try a different search term' : 'Shops will appear here once verified'}
               </p>
             </div>
           ) : (
@@ -266,7 +266,7 @@ export default function Index() {
               Ready to order?
             </h2>
             <p className="text-primary-foreground/80 mb-8 max-w-md mx-auto">
-              Create an account to start ordering from your favorite restaurants
+              Create an account to start ordering from your favorite shops
             </p>
             <Link to="/auth">
               <Button variant="secondary" size="lg" className="gap-2">

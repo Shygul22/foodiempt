@@ -93,9 +93,9 @@ export default function Orders() {
               <Package className="w-10 h-10 text-muted-foreground" />
             </div>
             <h3 className="text-xl font-semibold mb-2">No orders yet</h3>
-            <p className="text-muted-foreground mb-6">Start by ordering from your favorite restaurant</p>
+            <p className="text-muted-foreground mb-6">Start by ordering from your favorite shop</p>
             <Link to="/">
-              <Button variant="hero">Browse Restaurants</Button>
+              <Button variant="hero">Browse Shops</Button>
             </Link>
           </div>
         ) : (
@@ -106,7 +106,7 @@ export default function Orders() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h3 className="font-semibold text-lg">
-                        {order.restaurants?.name || 'Unknown Restaurant'}
+                        {order.restaurants?.name || 'Unknown Shop'}
                       </h3>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                         <Clock className="w-4 h-4" />
@@ -130,7 +130,7 @@ export default function Orders() {
                         </span>
                       )}
                       <span className="font-bold text-primary">
-                        ${Number(order.total_amount).toFixed(2)}
+                        ₹{Number(order.total_amount).toFixed(2)}
                       </span>
                     </div>
                   </div>

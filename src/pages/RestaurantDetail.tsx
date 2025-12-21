@@ -58,7 +58,7 @@ export default function RestaurantDetail() {
       return;
     }
     if (!restaurant?.is_open) {
-      toast.error('This restaurant is currently closed');
+      toast.error('This shop is currently closed');
       return;
     }
     addItem(menuItem, restaurant!.id);
@@ -89,7 +89,7 @@ export default function RestaurantDetail() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Restaurant not found</h2>
+          <h2 className="text-xl font-semibold mb-2">Shop not found</h2>
           <Link to="/">
             <Button variant="outline">Back to Home</Button>
           </Link>
@@ -174,7 +174,7 @@ export default function RestaurantDetail() {
           <div className="text-center py-16">
             <Utensils className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
             <h3 className="text-xl font-semibold mb-2">No menu items yet</h3>
-            <p className="text-muted-foreground">This restaurant hasn't added any items to their menu.</p>
+            <p className="text-muted-foreground">This shop hasn't added any items to their menu.</p>
           </div>
         ) : (
           <div className="space-y-10">
@@ -197,7 +197,7 @@ export default function RestaurantDetail() {
                                   {item.description}
                                 </p>
                               )}
-                              <p className="text-lg font-bold text-primary">${Number(item.price).toFixed(2)}</p>
+                              <p className="text-lg font-bold text-primary">₹{Number(item.price).toFixed(2)}</p>
                             </div>
                             <div className="flex flex-col items-center justify-center p-4 gap-2">
                               {item.image_url && (
@@ -258,7 +258,7 @@ export default function RestaurantDetail() {
               <Button className="w-full h-14 shadow-lg" size="lg">
                 <ShoppingCart className="w-5 h-5 mr-2" />
                 <span>View Cart ({getTotalItems()})</span>
-                <span className="ml-auto">${getTotalAmount().toFixed(2)}</span>
+                <span className="ml-auto">₹{getTotalAmount().toFixed(2)}</span>
               </Button>
             </Link>
           </div>
