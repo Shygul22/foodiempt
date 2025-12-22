@@ -27,27 +27,33 @@ import {
   History,
   Wallet,
   IndianRupee,
-  TrendingUp
+  TrendingUp,
+  User,
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 interface OrderWithDetails extends Order {
   restaurants: { name: string; address: string; phone: string | null } | null;
+  profiles?: { full_name: string | null; phone: string | null } | null;
 }
 
 export default function DeliveryDashboard() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [deliveryPartner, setDeliveryPartner] = useState<DeliveryPartner | null>(null);
+  const [profile, setProfile] = useState<{ full_name: string | null; phone: string | null } | null>(null);
   const [availableOrders, setAvailableOrders] = useState<OrderWithDetails[]>([]);
   const [myOrders, setMyOrders] = useState<OrderWithDetails[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderWithDetails[]>([]);
   const [earnings, setEarnings] = useState({ today: 0, week: 0, total: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [otpError, setOtpError] = useState(false);
+  const [deliveryOtpInputs, setDeliveryOtpInputs] = useState<Record<string, string>>({});
+  const [deliveryOtpErrors, setDeliveryOtpErrors] = useState<Record<string, boolean>>({});
   const [pickupOtpInputs, setPickupOtpInputs] = useState<Record<string, string>>({});
   const [pickupOtpErrors, setPickupOtpErrors] = useState<Record<string, boolean>>({});
   
@@ -67,76 +73,120 @@ export default function DeliveryDashboard() {
     }
   }, [user, authLoading]);
 
+  // Real-time order updates
+  useEffect(() => {
+    if (!deliveryPartner) return;
+
+    const channel = supabase
+      .channel('delivery-orders')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders'
+        },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [deliveryPartner]);
+
   const fetchData = async () => {
-    // Check if user is a delivery partner
-    const { data: partnerData } = await supabase
-      .from('delivery_partners')
-      .select('*')
-      .eq('user_id', user!.id)
-      .maybeSingle();
+    try {
+      // Check if user is a delivery partner
+      const { data: partnerData } = await supabase
+        .from('delivery_partners')
+        .select('*')
+        .eq('user_id', user!.id)
+        .maybeSingle();
 
-    if (partnerData) {
-      setDeliveryPartner(partnerData);
-      
-      // Fetch available orders (ready_for_pickup with no delivery partner)
-      const { data: availableData } = await supabase
-        .from('orders')
-        .select('*, restaurants(name, address, phone)')
-        .eq('status', 'ready_for_pickup')
-        .is('delivery_partner_id', null)
-        .order('created_at', { ascending: false });
+      // Fetch user profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, phone')
+        .eq('id', user!.id)
+        .maybeSingle();
 
-      if (availableData) setAvailableOrders(availableData);
+      if (profileData) setProfile(profileData);
 
-      // Fetch my orders
-      const { data: myOrdersData } = await supabase
-        .from('orders')
-        .select('*, restaurants(name, address, phone)')
-        .eq('delivery_partner_id', partnerData.id)
-        .in('status', ['picked_up', 'on_the_way'])
-        .order('created_at', { ascending: false });
+      if (partnerData) {
+        setDeliveryPartner(partnerData);
+        
+        // Fetch available orders (ready_for_pickup with no delivery partner)
+        const { data: availableData } = await supabase
+          .from('orders')
+          .select('*, restaurants(name, address, phone)')
+          .eq('status', 'ready_for_pickup')
+          .is('delivery_partner_id', null)
+          .order('created_at', { ascending: false });
 
-      if (myOrdersData) setMyOrders(myOrdersData);
+        if (availableData) setAvailableOrders(availableData);
 
-      // Fetch order history (completed/cancelled)
-      const { data: historyData } = await supabase
-        .from('orders')
-        .select('*, restaurants(name, address, phone)')
-        .eq('delivery_partner_id', partnerData.id)
-        .in('status', ['delivered', 'cancelled'])
-        .order('created_at', { ascending: false })
-        .limit(50);
+        // Fetch my orders with customer info
+        const { data: myOrdersData } = await supabase
+          .from('orders')
+          .select('*, restaurants(name, address, phone)')
+          .eq('delivery_partner_id', partnerData.id)
+          .in('status', ['picked_up', 'on_the_way'])
+          .order('created_at', { ascending: false });
 
-      if (historyData) setOrderHistory(historyData);
+        if (myOrdersData) setMyOrders(myOrdersData);
 
-      // Calculate earnings
-      const deliveredOrders = historyData?.filter(o => o.status === 'delivered') || [];
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const weekAgo = new Date(today);
-      weekAgo.setDate(weekAgo.getDate() - 7);
+        // Fetch order history (completed/cancelled)
+        const { data: historyData } = await supabase
+          .from('orders')
+          .select('*, restaurants(name, address, phone)')
+          .eq('delivery_partner_id', partnerData.id)
+          .in('status', ['delivered', 'cancelled'])
+          .order('created_at', { ascending: false })
+          .limit(50);
 
-      const deliveryFee = 30; // Fixed delivery fee per order
-      const todayEarnings = deliveredOrders
-        .filter(o => new Date(o.created_at) >= today)
-        .length * deliveryFee;
-      const weekEarnings = deliveredOrders
-        .filter(o => new Date(o.created_at) >= weekAgo)
-        .length * deliveryFee;
-      const totalEarnings = deliveredOrders.length * deliveryFee;
-      const pendingSettlement = Math.floor(totalEarnings * 0.2); // 20% pending
+        if (historyData) setOrderHistory(historyData);
 
-      setEarnings({
-        today: todayEarnings,
-        week: weekEarnings,
-        total: totalEarnings,
-        pending: pendingSettlement
-      });
-    } else {
-      setShowRegister(true);
+        // Calculate earnings
+        const deliveredOrders = historyData?.filter(o => o.status === 'delivered') || [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+
+        const deliveryFee = 30; // Fixed delivery fee per order
+        const todayEarnings = deliveredOrders
+          .filter(o => new Date(o.created_at) >= today)
+          .length * deliveryFee;
+        const weekEarnings = deliveredOrders
+          .filter(o => new Date(o.created_at) >= weekAgo)
+          .length * deliveryFee;
+        const totalEarnings = deliveredOrders.length * deliveryFee;
+        const pendingSettlement = Math.floor(totalEarnings * 0.2); // 20% pending
+
+        setEarnings({
+          today: todayEarnings,
+          week: weekEarnings,
+          total: totalEarnings,
+          pending: pendingSettlement
+        });
+      } else {
+        setShowRegister(true);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Failed to load data');
     }
 
     setLoading(false);
+    setRefreshing(false);
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchData();
   };
 
   const sendVerificationOtp = () => {
@@ -246,17 +296,18 @@ export default function DeliveryDashboard() {
       toast.error('Failed to update status');
     } else {
       toast.success('Status updated');
-      setOtpInput('');
-      setOtpError(false);
+      setDeliveryOtpInputs(prev => ({ ...prev, [orderId]: '' }));
+      setDeliveryOtpErrors(prev => ({ ...prev, [orderId]: false }));
       fetchData();
     }
   };
 
   const verifyAndDeliver = (order: OrderWithDetails) => {
-    if (otpInput === order.delivery_otp) {
+    const otpValue = deliveryOtpInputs[order.id] || '';
+    if (otpValue === order.delivery_otp) {
       updateOrderStatus(order.id, 'delivered');
     } else {
-      setOtpError(true);
+      setDeliveryOtpErrors(prev => ({ ...prev, [order.id]: true }));
       toast.error('Invalid OTP. Please check with the customer.');
     }
   };
@@ -361,17 +412,35 @@ export default function DeliveryDashboard() {
               </Link>
               <div className="flex items-center gap-2">
                 <Bike className="w-5 h-5 text-primary" />
-                <h1 className="text-xl font-bold">Delivery Dashboard</h1>
+                <div>
+                  <h1 className="text-lg font-bold leading-tight">Delivery Dashboard</h1>
+                  {profile?.full_name && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <User className="w-3 h-3" /> {profile.full_name}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <span className={`text-sm ${deliveryPartner?.is_available ? 'text-accent' : 'text-muted-foreground'}`}>
-                {deliveryPartner?.is_available ? 'Online' : 'Offline'}
-              </span>
-              <Switch
-                checked={deliveryPartner?.is_available || false}
-                onCheckedChange={toggleAvailability}
-              />
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="h-8 w-8"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </Button>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm ${deliveryPartner?.is_available ? 'text-accent' : 'text-muted-foreground'}`}>
+                  {deliveryPartner?.is_available ? 'Online' : 'Offline'}
+                </span>
+                <Switch
+                  checked={deliveryPartner?.is_available || false}
+                  onCheckedChange={toggleAvailability}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -379,7 +448,7 @@ export default function DeliveryDashboard() {
 
       <div className="container mx-auto px-4 py-6">
         <Tabs defaultValue="active" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="active" className="gap-2">
               <Package className="w-4 h-4" />
               Active
@@ -391,6 +460,10 @@ export default function DeliveryDashboard() {
             <TabsTrigger value="earnings" className="gap-2">
               <Wallet className="w-4 h-4" />
               Earnings
+            </TabsTrigger>
+            <TabsTrigger value="profile" className="gap-2">
+              <User className="w-4 h-4" />
+              Profile
             </TabsTrigger>
           </TabsList>
 
@@ -430,22 +503,44 @@ export default function DeliveryDashboard() {
                     <div className="grid gap-3">
                       <div className="flex items-start gap-3 p-3 bg-card rounded-lg">
                         <MapPin className="w-5 h-5 text-accent mt-0.5" />
-                        <div>
+                        <div className="flex-1">
                           <p className="text-sm text-muted-foreground">Pickup from</p>
                           <p className="font-medium">{currentOrder.restaurants?.address}</p>
-                          {currentOrder.restaurants?.phone && (
-                            <a href={`tel:${currentOrder.restaurants.phone}`} className="flex items-center gap-1 text-primary text-sm mt-1">
-                              <Phone className="w-3 h-3" />
-                              {currentOrder.restaurants.phone}
+                          <div className="flex items-center gap-3 mt-2">
+                            {currentOrder.restaurants?.phone && (
+                              <a href={`tel:${currentOrder.restaurants.phone}`} className="flex items-center gap-1 text-primary text-sm hover:underline">
+                                <Phone className="w-3 h-3" />
+                                Call
+                              </a>
+                            )}
+                            <a 
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(currentOrder.restaurants?.address || '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-accent text-sm hover:underline"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Navigate
                             </a>
-                          )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-start gap-3 p-3 bg-card rounded-lg">
                         <Navigation className="w-5 h-5 text-primary mt-0.5" />
-                        <div>
+                        <div className="flex-1">
                           <p className="text-sm text-muted-foreground">Deliver to</p>
                           <p className="font-medium">{currentOrder.delivery_address}</p>
+                          <div className="flex items-center gap-3 mt-2">
+                            <a 
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(currentOrder.delivery_address)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-primary text-sm hover:underline"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Navigate
+                            </a>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -467,15 +562,15 @@ export default function DeliveryDashboard() {
                             <Input
                               type="text"
                               placeholder="Enter 4-digit OTP"
-                              value={otpInput}
+                              value={deliveryOtpInputs[currentOrder.id] || ''}
                               onChange={(e) => {
-                                setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4));
-                                setOtpError(false);
+                                setDeliveryOtpInputs(prev => ({ ...prev, [currentOrder.id]: e.target.value.replace(/\D/g, '').slice(0, 4) }));
+                                setDeliveryOtpErrors(prev => ({ ...prev, [currentOrder.id]: false }));
                               }}
-                              className={`font-mono text-center text-lg tracking-widest ${otpError ? 'border-destructive' : ''}`}
+                              className={`font-mono text-center text-lg tracking-widest ${deliveryOtpErrors[currentOrder.id] ? 'border-destructive' : ''}`}
                               maxLength={4}
                             />
-                            {otpError && (
+                            {deliveryOtpErrors[currentOrder.id] && (
                               <div className="flex items-center gap-1 text-destructive text-sm mt-2">
                                 <AlertCircle className="w-3 h-3" />
                                 <span>Invalid OTP</span>
@@ -486,7 +581,7 @@ export default function DeliveryDashboard() {
                             className="w-full" 
                             variant="success" 
                             onClick={() => verifyAndDeliver(currentOrder)}
-                            disabled={otpInput.length !== 4}
+                            disabled={(deliveryOtpInputs[currentOrder.id] || '').length !== 4}
                           >
                             <CheckCircle className="w-4 h-4 mr-2" />
                             Verify & Mark Delivered
@@ -552,7 +647,26 @@ export default function DeliveryDashboard() {
                           <div className="space-y-2 text-sm mb-4">
                             <div className="flex items-start gap-2">
                               <MapPin className="w-4 h-4 text-accent mt-0.5" />
-                              <span className="text-muted-foreground">{order.restaurants?.address}</span>
+                              <div className="flex-1">
+                                <span className="text-muted-foreground">{order.restaurants?.address}</span>
+                                <div className="flex items-center gap-3 mt-1">
+                                  {order.restaurants?.phone && (
+                                    <a href={`tel:${order.restaurants.phone}`} className="flex items-center gap-1 text-primary text-xs hover:underline">
+                                      <Phone className="w-3 h-3" />
+                                      Call Shop
+                                    </a>
+                                  )}
+                                  <a 
+                                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(order.restaurants?.address || '')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-accent text-xs hover:underline"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    Map
+                                  </a>
+                                </div>
+                              </div>
                             </div>
                             <div className="flex items-start gap-2">
                               <Navigation className="w-4 h-4 text-primary mt-0.5" />
@@ -746,6 +860,104 @@ export default function DeliveryDashboard() {
                     Settlements are processed every Monday to your registered bank account
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="profile" className="space-y-6">
+            {/* Profile Info */}
+            <Card className="border-0 shadow-md">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary" />
+                  Partner Profile
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Name</span>
+                  <span className="font-medium">{profile?.full_name || 'Not set'}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Phone</span>
+                  <span className="font-medium">{deliveryPartner?.phone || 'Not set'}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Vehicle Type</span>
+                  <span className="font-medium flex items-center gap-2">
+                    <Bike className="w-4 h-4" />
+                    {deliveryPartner?.vehicle_type || 'Bike'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Phone Verified</span>
+                  <span className={`font-medium flex items-center gap-1 ${deliveryPartner?.phone_verified ? 'text-accent' : 'text-destructive'}`}>
+                    {deliveryPartner?.phone_verified ? (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        Verified
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-4 h-4" />
+                        Not Verified
+                      </>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className={`font-medium ${deliveryPartner?.is_available ? 'text-accent' : 'text-muted-foreground'}`}>
+                    {deliveryPartner?.is_available ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Delivery Stats */}
+            <Card className="border-0 shadow-md">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  Delivery Stats
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Total Deliveries</span>
+                  <span className="font-bold text-lg">{orderHistory.filter(o => o.status === 'delivered').length}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Cancelled Orders</span>
+                  <span className="font-bold text-lg">{orderHistory.filter(o => o.status === 'cancelled').length}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Success Rate</span>
+                  <span className="font-bold text-lg text-accent">
+                    {orderHistory.length > 0 
+                      ? Math.round((orderHistory.filter(o => o.status === 'delivered').length / orderHistory.length) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Member Since</span>
+                  <span className="font-medium">
+                    {deliveryPartner?.created_at 
+                      ? format(new Date(deliveryPartner.created_at), 'MMM d, yyyy')
+                      : 'N/A'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Help & Support */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="py-6 text-center">
+                <Phone className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-muted-foreground mb-2">Need help?</p>
+                <a href="tel:+919876543210" className="text-primary font-medium hover:underline">
+                  Contact Support
+                </a>
               </CardContent>
             </Card>
           </TabsContent>
