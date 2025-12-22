@@ -37,8 +37,13 @@ import { format } from 'date-fns';
 
 interface OrderWithDetails extends Order {
   restaurants: { name: string; address: string; phone: string | null } | null;
-  profiles?: { full_name: string | null; phone: string | null } | null;
+  customer_profile?: { full_name: string | null; phone: string | null } | null;
 }
+
+// Helper to generate short order ID
+const getShortOrderId = (id: string) => {
+  return `#${id.slice(0, 8).toUpperCase()}`;
+};
 
 export default function DeliveryDashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -126,7 +131,20 @@ export default function DeliveryDashboard() {
           .is('delivery_partner_id', null)
           .order('created_at', { ascending: false });
 
-        if (availableData) setAvailableOrders(availableData);
+        if (availableData) {
+          // Fetch customer profiles for available orders
+          const customerIds = availableData.map(o => o.customer_id);
+          const { data: customerProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, phone')
+            .in('id', customerIds);
+
+          const ordersWithProfiles = availableData.map(order => ({
+            ...order,
+            customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
+          }));
+          setAvailableOrders(ordersWithProfiles);
+        }
 
         // Fetch my orders with customer info
         const { data: myOrdersData } = await supabase
@@ -136,7 +154,20 @@ export default function DeliveryDashboard() {
           .in('status', ['picked_up', 'on_the_way'])
           .order('created_at', { ascending: false });
 
-        if (myOrdersData) setMyOrders(myOrdersData);
+        if (myOrdersData) {
+          // Fetch customer profiles for my orders
+          const customerIds = myOrdersData.map(o => o.customer_id);
+          const { data: customerProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, phone')
+            .in('id', customerIds);
+
+          const ordersWithProfiles = myOrdersData.map(order => ({
+            ...order,
+            customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
+          }));
+          setMyOrders(ordersWithProfiles);
+        }
 
         // Fetch order history (completed/cancelled)
         const { data: historyData } = await supabase
@@ -472,9 +503,14 @@ export default function DeliveryDashboard() {
             {currentOrder && (
               <Card className="border-0 shadow-lg bg-gradient-to-r from-primary/5 to-accent/5">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Package className="w-5 h-5 text-primary" />
-                    Current Delivery
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-5 h-5 text-primary" />
+                      Current Delivery
+                    </div>
+                    <span className="text-sm font-mono bg-secondary px-2 py-1 rounded">
+                      {getShortOrderId(currentOrder.id)}
+                    </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -500,6 +536,28 @@ export default function DeliveryDashboard() {
                       </div>
                     </div>
 
+                    {/* Customer Info */}
+                    <div className="flex items-center justify-between p-3 bg-card rounded-lg border border-primary/20">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <User className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{currentOrder.customer_profile?.full_name || 'Customer'}</p>
+                          <p className="text-sm text-muted-foreground">Customer</p>
+                        </div>
+                      </div>
+                      {currentOrder.customer_profile?.phone && (
+                        <a 
+                          href={`tel:${currentOrder.customer_profile.phone}`}
+                          className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg font-medium hover:bg-accent/90 transition-colors"
+                        >
+                          <Phone className="w-4 h-4" />
+                          Call
+                        </a>
+                      )}
+                    </div>
+
                     <div className="grid gap-3">
                       <div className="flex items-start gap-3 p-3 bg-card rounded-lg">
                         <MapPin className="w-5 h-5 text-accent mt-0.5" />
@@ -510,7 +568,7 @@ export default function DeliveryDashboard() {
                             {currentOrder.restaurants?.phone && (
                               <a href={`tel:${currentOrder.restaurants.phone}`} className="flex items-center gap-1 text-primary text-sm hover:underline">
                                 <Phone className="w-3 h-3" />
-                                Call
+                                Call Shop
                               </a>
                             )}
                             <a 
@@ -622,7 +680,12 @@ export default function DeliveryDashboard() {
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between mb-3">
                             <div>
-                              <p className="font-semibold">{order.restaurants?.name}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold">{order.restaurants?.name}</p>
+                                <span className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">
+                                  {getShortOrderId(order.id)}
+                                </span>
+                              </div>
                               <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                                 <Clock className="w-4 h-4" />
                                 {format(new Date(order.created_at), 'h:mm a')}
@@ -642,6 +705,23 @@ export default function DeliveryDashboard() {
                                 )}
                               </span>
                             </div>
+                          </div>
+
+                          {/* Customer Info */}
+                          <div className="flex items-center justify-between p-2 bg-secondary/50 rounded-lg mb-3">
+                            <div className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-muted-foreground" />
+                              <span className="text-sm">{order.customer_profile?.full_name || 'Customer'}</span>
+                            </div>
+                            {order.customer_profile?.phone && (
+                              <a 
+                                href={`tel:${order.customer_profile.phone}`}
+                                className="flex items-center gap-1 text-primary text-xs hover:underline"
+                              >
+                                <Phone className="w-3 h-3" />
+                                Call
+                              </a>
+                            )}
                           </div>
 
                           <div className="space-y-2 text-sm mb-4">
@@ -749,7 +829,12 @@ export default function DeliveryDashboard() {
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between mb-2">
                         <div>
-                          <p className="font-semibold">{order.restaurants?.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold">{order.restaurants?.name}</p>
+                            <span className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">
+                              {getShortOrderId(order.id)}
+                            </span>
+                          </div>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                             <Clock className="w-4 h-4" />
                             {format(new Date(order.created_at), 'MMM d, h:mm a')}
