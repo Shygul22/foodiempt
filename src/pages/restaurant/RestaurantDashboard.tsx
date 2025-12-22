@@ -24,14 +24,22 @@ import {
   Power,
   Key,
   Banknote,
-  Smartphone
+  Smartphone,
+  User,
+  Phone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 interface OrderWithItems extends Order {
   order_items: { quantity: number; unit_price: number; menu_items: { name: string } | null }[];
+  customer_profile?: { full_name: string | null; phone: string | null } | null;
 }
+
+// Helper to generate short order ID
+const getShortOrderId = (id: string) => {
+  return `#${id.slice(0, 8).toUpperCase()}`;
+};
 
 export default function RestaurantDashboard() {
   const { user, hasRole, loading: authLoading } = useAuth();
@@ -101,7 +109,20 @@ export default function RestaurantDashboard() {
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (ordersData) setOrders(ordersData as OrderWithItems[]);
+      if (ordersData) {
+        // Fetch customer profiles for orders
+        const customerIds = ordersData.map(o => o.customer_id);
+        const { data: customerProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone')
+          .in('id', customerIds);
+
+        const ordersWithProfiles = ordersData.map(order => ({
+          ...order,
+          customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
+        }));
+        setOrders(ordersWithProfiles as OrderWithItems[]);
+      }
     } else {
       setShowCreateRestaurant(true);
     }
@@ -417,14 +438,43 @@ export default function RestaurantDashboard() {
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between mb-3">
                         <div>
-                          <p className="font-mono text-sm text-muted-foreground">#{order.id.slice(0, 8)}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm bg-secondary px-1.5 py-0.5 rounded">
+                              {getShortOrderId(order.id)}
+                            </span>
+                            <StatusBadge status={order.status as OrderStatus} />
+                          </div>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                             <Clock className="w-4 h-4" />
                             {format(new Date(order.created_at), 'MMM d, h:mm a')}
                           </div>
                         </div>
-                        <StatusBadge status={order.status as OrderStatus} />
+                        <p className="font-bold text-primary text-lg">₹{Number(order.total_amount).toFixed(2)}</p>
                       </div>
+
+                      {/* Customer Info */}
+                      <div className="flex items-center justify-between p-2 bg-secondary/50 rounded-lg mb-3">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{order.customer_profile?.full_name || 'Customer'}</span>
+                        </div>
+                        {order.customer_profile?.phone && (
+                          <a 
+                            href={`tel:${order.customer_profile.phone}`}
+                            className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+                          >
+                            <Phone className="w-3 h-3" />
+                            Call
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Delivery Address */}
+                      {order.delivery_address && (
+                        <p className="text-sm text-muted-foreground mb-3 truncate">
+                          📍 {order.delivery_address}
+                        </p>
+                      )}
                       
                       <div className="space-y-1 mb-3">
                         {order.order_items.map((item, idx) => (
@@ -435,7 +485,6 @@ export default function RestaurantDashboard() {
                       </div>
 
                       <div className="flex items-center justify-between pt-3 border-t border-border">
-                        <p className="font-bold">₹{Number(order.total_amount).toFixed(2)}</p>
                         <div className="flex gap-2">
                           {order.status === 'pending' && (
                             <>
