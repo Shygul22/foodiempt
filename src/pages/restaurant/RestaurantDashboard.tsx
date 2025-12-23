@@ -12,21 +12,35 @@ import { Switch } from '@/components/ui/switch';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { 
   Store, 
   ArrowLeft, 
   Plus, 
   Package, 
-  DollarSign,
   Clock,
   Edit,
   Trash2,
-  Power,
   Key,
   Banknote,
   Smartphone,
   User,
-  Phone
+  Phone,
+  XCircle,
+  History,
+  TrendingUp,
+  IndianRupee,
+  Wallet
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -42,11 +56,13 @@ const getShortOrderId = (id: string) => {
 };
 
 export default function RestaurantDashboard() {
-  const { user, hasRole, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
+  const [orderHistory, setOrderHistory] = useState<OrderWithItems[]>([]);
+  const [earnings, setEarnings] = useState({ today: 0, week: 0, total: 0, orderCount: 0 });
   const [loading, setLoading] = useState(true);
   const [showCreateRestaurant, setShowCreateRestaurant] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
@@ -77,9 +93,14 @@ export default function RestaurantDashboard() {
         return;
       }
       fetchData();
-      subscribeToOrders();
     }
   }, [user, authLoading]);
+
+  useEffect(() => {
+    if (restaurant?.id) {
+      subscribeToOrders();
+    }
+  }, [restaurant?.id]);
 
   const fetchData = async () => {
     // Fetch restaurant owned by user
@@ -101,27 +122,67 @@ export default function RestaurantDashboard() {
 
       if (menuData) setMenuItems(menuData);
 
-      // Fetch orders
+      // Fetch active orders
       const { data: ordersData } = await supabase
         .from('orders')
         .select('*, order_items(quantity, unit_price, menu_items(name))')
         .eq('restaurant_id', restaurantData.id)
+        .in('status', ['pending', 'confirmed', 'preparing', 'ready_for_pickup', 'picked_up', 'on_the_way'])
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (ordersData) {
-        // Fetch customer profiles for orders
-        const customerIds = ordersData.map(o => o.customer_id);
-        const { data: customerProfiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, phone')
-          .in('id', customerIds);
+      // Fetch order history (delivered/cancelled)
+      const { data: historyData } = await supabase
+        .from('orders')
+        .select('*, order_items(quantity, unit_price, menu_items(name))')
+        .eq('restaurant_id', restaurantData.id)
+        .in('status', ['delivered', 'cancelled'])
+        .order('created_at', { ascending: false })
+        .limit(50);
 
+      const allOrders = [...(ordersData || []), ...(historyData || [])];
+      const customerIds = allOrders.map(o => o.customer_id);
+      const { data: customerProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone')
+        .in('id', customerIds);
+
+      if (ordersData) {
         const ordersWithProfiles = ordersData.map(order => ({
           ...order,
           customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
         }));
         setOrders(ordersWithProfiles as OrderWithItems[]);
+      }
+
+      if (historyData) {
+        const historyWithProfiles = historyData.map(order => ({
+          ...order,
+          customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
+        }));
+        setOrderHistory(historyWithProfiles as OrderWithItems[]);
+
+        // Calculate earnings
+        const deliveredOrders = historyData.filter(o => o.status === 'delivered');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+
+        const todayEarnings = deliveredOrders
+          .filter(o => new Date(o.created_at) >= today)
+          .reduce((sum, o) => sum + Number(o.total_amount), 0);
+        const weekEarnings = deliveredOrders
+          .filter(o => new Date(o.created_at) >= weekAgo)
+          .reduce((sum, o) => sum + Number(o.total_amount), 0);
+        const totalEarnings = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+
+        setEarnings({
+          today: todayEarnings,
+          week: weekEarnings,
+          total: totalEarnings,
+          orderCount: deliveredOrders.length
+        });
       }
     } else {
       setShowCreateRestaurant(true);
@@ -131,8 +192,6 @@ export default function RestaurantDashboard() {
   };
 
   const subscribeToOrders = () => {
-    if (!restaurant?.id) return;
-
     const channel = supabase
       .channel('restaurant-orders')
       .on(
@@ -141,7 +200,6 @@ export default function RestaurantDashboard() {
           event: '*',
           schema: 'public',
           table: 'orders',
-          filter: `restaurant_id=eq.${restaurant.id}`,
         },
         () => {
           fetchData();
@@ -284,6 +342,20 @@ export default function RestaurantDashboard() {
     }
   };
 
+  const cancelOrder = async (orderId: string) => {
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'cancelled' })
+      .eq('id', orderId);
+
+    if (error) {
+      toast.error('Failed to cancel order');
+    } else {
+      fetchData();
+      toast.success('Order cancelled');
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -343,15 +415,15 @@ export default function RestaurantDashboard() {
                   <Input
                     value={restaurantForm.phone}
                     onChange={(e) => setRestaurantForm({ ...restaurantForm, phone: e.target.value })}
-                    placeholder="+1 234 567 8900"
+                    placeholder="+91 1234567890"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Cuisine Type</Label>
+                  <Label>Category</Label>
                   <Input
                     value={restaurantForm.cuisine_type}
                     onChange={(e) => setRestaurantForm({ ...restaurantForm, cuisine_type: e.target.value })}
-                    placeholder="Italian, Chinese..."
+                    placeholder="Food, Grocery..."
                   />
                 </div>
               </div>
@@ -373,7 +445,7 @@ export default function RestaurantDashboard() {
     );
   }
 
-  const pendingOrders = orders.filter((o) => o.status === 'pending' || o.status === 'confirmed' || o.status === 'preparing');
+  const pendingOrders = orders.filter((o) => ['pending', 'confirmed', 'preparing', 'ready_for_pickup'].includes(o.status));
 
   return (
     <div className="min-h-screen bg-background">
@@ -410,24 +482,37 @@ export default function RestaurantDashboard() {
 
       <div className="container mx-auto px-4 py-6">
         <Tabs defaultValue="orders" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="orders" className="relative">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="orders" className="relative gap-2">
+              <Package className="w-4 h-4" />
               Orders
               {pendingOrders.length > 0 && (
-                <span className="ml-2 w-5 h-5 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
+                <span className="w-5 h-5 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
                   {pendingOrders.length}
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="menu">Menu Items</TabsTrigger>
+            <TabsTrigger value="menu" className="gap-2">
+              <Edit className="w-4 h-4" />
+              Menu
+            </TabsTrigger>
+            <TabsTrigger value="history" className="gap-2">
+              <History className="w-4 h-4" />
+              History
+            </TabsTrigger>
+            <TabsTrigger value="earnings" className="gap-2">
+              <Wallet className="w-4 h-4" />
+              Earnings
+            </TabsTrigger>
           </TabsList>
 
+          {/* Orders Tab */}
           <TabsContent value="orders" className="space-y-4">
             {orders.length === 0 ? (
               <Card className="border-0 shadow-sm">
                 <CardContent className="py-16 text-center">
                   <Package className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">No orders yet</h3>
+                  <h3 className="text-xl font-semibold mb-2">No active orders</h3>
                   <p className="text-muted-foreground">Orders will appear here when customers place them</p>
                 </CardContent>
               </Card>
@@ -485,7 +570,7 @@ export default function RestaurantDashboard() {
                       </div>
 
                       <div className="flex items-center justify-between pt-3 border-t border-border">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                           {order.status === 'pending' && (
                             <>
                               <Button size="sm" onClick={() => updateOrderStatus(order.id, 'confirmed')}>
@@ -497,14 +582,68 @@ export default function RestaurantDashboard() {
                             </>
                           )}
                           {order.status === 'confirmed' && (
-                            <Button size="sm" onClick={() => updateOrderStatus(order.id, 'preparing')}>
-                              Start Preparing
-                            </Button>
+                            <>
+                              <Button size="sm" onClick={() => updateOrderStatus(order.id, 'preparing')}>
+                                Start Preparing
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="sm" variant="outline" className="text-destructive">
+                                    <XCircle className="w-3 h-3 mr-1" />
+                                    Cancel
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to cancel this order? The customer will be notified.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Keep Order</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => cancelOrder(order.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Yes, Cancel
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </>
                           )}
                           {order.status === 'preparing' && (
-                            <Button size="sm" onClick={() => updateOrderStatus(order.id, 'ready_for_pickup')}>
-                              Ready for Pickup
-                            </Button>
+                            <>
+                              <Button size="sm" onClick={() => updateOrderStatus(order.id, 'ready_for_pickup')}>
+                                Ready for Pickup
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="sm" variant="outline" className="text-destructive">
+                                    <XCircle className="w-3 h-3 mr-1" />
+                                    Cancel
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This order is being prepared. Are you sure you want to cancel it?
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Keep Order</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => cancelOrder(order.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Yes, Cancel
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </>
                           )}
                         </div>
                       </div>
@@ -533,12 +672,6 @@ export default function RestaurantDashboard() {
                           </span>
                         )}
                       </div>
-
-                      {order.delivery_address && (
-                        <p className="text-sm text-muted-foreground mt-2">
-                          📍 {order.delivery_address}
-                        </p>
-                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -546,6 +679,7 @@ export default function RestaurantDashboard() {
             )}
           </TabsContent>
 
+          {/* Menu Tab */}
           <TabsContent value="menu" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold">Menu Items</h2>
@@ -577,7 +711,7 @@ export default function RestaurantDashboard() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Price *</Label>
+                        <Label>Price (₹) *</Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -691,7 +825,7 @@ export default function RestaurantDashboard() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Price *</Label>
+                      <Label>Price (₹) *</Label>
                       <Input
                         type="number"
                         step="0.01"
@@ -718,6 +852,118 @@ export default function RestaurantDashboard() {
                 </div>
               </DialogContent>
             </Dialog>
+          </TabsContent>
+
+          {/* History Tab */}
+          <TabsContent value="history" className="space-y-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <History className="w-5 h-5" />
+              Order History
+            </h2>
+            {orderHistory.length === 0 ? (
+              <Card className="border-0 shadow-sm">
+                <CardContent className="py-16 text-center">
+                  <History className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No order history</h3>
+                  <p className="text-muted-foreground">Completed orders will appear here</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3">
+                {orderHistory.map((order) => (
+                  <Card key={order.id} className="border-0 shadow-sm">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-sm bg-secondary px-1.5 py-0.5 rounded">
+                            {getShortOrderId(order.id)}
+                          </span>
+                          <StatusBadge status={order.status as OrderStatus} />
+                        </div>
+                        <p className="font-bold text-primary">₹{Number(order.total_amount).toFixed(2)}</p>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-sm text-muted-foreground">
+                        <span>{order.customer_profile?.full_name || 'Customer'}</span>
+                        <span>{format(new Date(order.created_at), 'MMM d, h:mm a')}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Earnings Tab */}
+          <TabsContent value="earnings" className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                      <IndianRupee className="w-5 h-5 text-accent" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Today</p>
+                      <p className="text-2xl font-bold">₹{earnings.today.toFixed(0)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">This Week</p>
+                      <p className="text-2xl font-bold">₹{earnings.week.toFixed(0)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-status-delivered/10 flex items-center justify-center">
+                      <Wallet className="w-5 h-5 text-status-delivered" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Earnings</p>
+                      <p className="text-2xl font-bold">₹{earnings.total.toFixed(0)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
+                      <Package className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Orders Delivered</p>
+                      <p className="text-2xl font-bold">{earnings.orderCount}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">Commission Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Platform Commission Rate</span>
+                  <span className="font-bold">{restaurant?.commission_rate || 15}%</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Commission is deducted from each order. Settlements are processed weekly.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
