@@ -6,18 +6,52 @@ import { Order, OrderStatus } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
-import { ArrowLeft, Package, Clock, Banknote, Smartphone, Key } from 'lucide-react';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { ArrowLeft, Package, Clock, Banknote, Smartphone, Key, XCircle, RotateCcw, MapPin, Phone } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 interface OrderWithRestaurant extends Order {
-  restaurants: { name: string } | null;
+  restaurants: { name: string; phone: string | null } | null;
 }
+
+// Helper to generate short order ID
+const getShortOrderId = (id: string) => {
+  return `#${id.slice(0, 8).toUpperCase()}`;
+};
+
+// Order tracking steps
+const orderSteps: { status: OrderStatus; label: string }[] = [
+  { status: 'pending', label: 'Order Placed' },
+  { status: 'confirmed', label: 'Confirmed' },
+  { status: 'preparing', label: 'Preparing' },
+  { status: 'ready_for_pickup', label: 'Ready' },
+  { status: 'picked_up', label: 'Picked Up' },
+  { status: 'on_the_way', label: 'On the Way' },
+  { status: 'delivered', label: 'Delivered' },
+];
+
+const getStepIndex = (status: OrderStatus) => {
+  if (status === 'cancelled') return -1;
+  return orderSteps.findIndex(s => s.status === status);
+};
 
 export default function Orders() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderWithRestaurant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -26,14 +60,15 @@ export default function Orders() {
     }
     if (user) {
       fetchOrders();
-      subscribeToOrders();
+      const cleanup = subscribeToOrders();
+      return cleanup;
     }
   }, [user, authLoading]);
 
   const fetchOrders = async () => {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, restaurants(name)')
+      .select('*, restaurants(name, phone)')
       .eq('customer_id', user!.id)
       .order('created_at', { ascending: false });
 
@@ -63,6 +98,27 @@ export default function Orders() {
     return () => {
       supabase.removeChannel(channel);
     };
+  };
+
+  const cancelOrder = async (orderId: string) => {
+    setCancellingId(orderId);
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'cancelled' })
+      .eq('id', orderId)
+      .eq('customer_id', user!.id);
+
+    if (error) {
+      toast.error('Failed to cancel order');
+    } else {
+      toast.success('Order cancelled successfully');
+      fetchOrders();
+    }
+    setCancellingId(null);
+  };
+
+  const canCancelOrder = (status: OrderStatus) => {
+    return ['pending', 'confirmed'].includes(status);
   };
 
   if (authLoading || loading) {
@@ -100,59 +156,160 @@ export default function Orders() {
           </div>
         ) : (
           <div className="space-y-4">
-            {orders.map((order) => (
-              <Card key={order.id} className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-lg">
-                        {order.restaurants?.name || 'Unknown Shop'}
-                      </h3>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                        <Clock className="w-4 h-4" />
-                        <span>{format(new Date(order.created_at), 'MMM d, yyyy h:mm a')}</span>
+            {orders.map((order) => {
+              const currentStep = getStepIndex(order.status as OrderStatus);
+              const isCancelled = order.status === 'cancelled';
+              const isDelivered = order.status === 'delivered';
+              const isActive = !isCancelled && !isDelivered;
+
+              return (
+                <Card key={order.id} className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-lg">
+                            {order.restaurants?.name || 'Unknown Shop'}
+                          </h3>
+                          <span className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">
+                            {getShortOrderId(order.id)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                          <Clock className="w-4 h-4" />
+                          <span>{format(new Date(order.created_at), 'MMM d, yyyy h:mm a')}</span>
+                        </div>
                       </div>
+                      <StatusBadge status={order.status as OrderStatus} />
                     </div>
-                    <StatusBadge status={order.status as OrderStatus} />
-                  </div>
-                  <div className="flex items-center justify-between pt-3 border-t border-border">
-                    <span className="text-sm text-muted-foreground">
-                      Order #{order.id.slice(0, 8)}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {order.payment_method === 'cod' ? (
-                        <span className="flex items-center gap-1 text-xs bg-accent/10 text-accent px-2 py-1 rounded-full">
-                          <Banknote className="w-3 h-3" /> COD
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                          <Smartphone className="w-3 h-3" /> GPay
-                        </span>
-                      )}
-                      <span className="font-bold text-primary">
+
+                    {/* Order Tracking Steps for Active Orders */}
+                    {isActive && (
+                      <div className="mb-4 p-3 bg-secondary/30 rounded-lg">
+                        <div className="flex items-center justify-between overflow-x-auto gap-1">
+                          {orderSteps.slice(0, 7).map((step, index) => (
+                            <div key={step.status} className="flex flex-col items-center min-w-[50px]">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                                index <= currentStep 
+                                  ? 'bg-primary text-primary-foreground' 
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {index + 1}
+                              </div>
+                              <span className={`text-[10px] mt-1 text-center ${
+                                index <= currentStep ? 'text-primary font-medium' : 'text-muted-foreground'
+                              }`}>
+                                {step.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Shop Contact */}
+                    {order.restaurants?.phone && isActive && (
+                      <div className="flex items-center justify-between p-2 bg-primary/5 rounded-lg mb-3">
+                        <span className="text-sm text-muted-foreground">Contact Shop</span>
+                        <a 
+                          href={`tel:${order.restaurants.phone}`}
+                          className="flex items-center gap-1 text-primary text-sm font-medium hover:underline"
+                        >
+                          <Phone className="w-4 h-4" />
+                          Call
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Amount and Payment */}
+                    <div className="flex items-center justify-between pt-3 border-t border-border">
+                      <div className="flex items-center gap-2">
+                        {order.payment_method === 'cod' ? (
+                          <span className="flex items-center gap-1 text-xs bg-accent/10 text-accent px-2 py-1 rounded-full">
+                            <Banknote className="w-3 h-3" /> COD
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                            <Smartphone className="w-3 h-3" /> GPay
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-bold text-primary text-lg">
                         ₹{Number(order.total_amount).toFixed(2)}
                       </span>
                     </div>
-                  </div>
-                  {order.delivery_address && (
-                    <p className="text-sm text-muted-foreground mt-2 truncate">
-                      📍 {order.delivery_address}
-                    </p>
-                  )}
-                  {/* Show OTP for active orders */}
-                  {order.delivery_otp && !['delivered', 'cancelled'].includes(order.status) && (
-                    <div className="mt-3 p-3 bg-primary/10 rounded-lg border border-primary/20">
-                      <div className="flex items-center gap-2">
-                        <Key className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-medium text-primary">Delivery OTP:</span>
-                        <span className="font-mono font-bold text-lg text-primary tracking-widest">{order.delivery_otp}</span>
+
+                    {/* Delivery Address */}
+                    {order.delivery_address && (
+                      <div className="flex items-start gap-2 mt-3 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                        <span className="truncate">{order.delivery_address}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">Share this code with your delivery partner</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                    )}
+
+                    {/* Show OTP for active orders */}
+                    {order.delivery_otp && isActive && (
+                      <div className="mt-3 p-3 bg-primary/10 rounded-lg border border-primary/20">
+                        <div className="flex items-center gap-2">
+                          <Key className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-medium text-primary">Delivery OTP:</span>
+                          <span className="font-mono font-bold text-lg text-primary tracking-widest">{order.delivery_otp}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Share this code with your delivery partner</p>
+                      </div>
+                    )}
+
+                    {/* Cancel Order Button */}
+                    {canCancelOrder(order.status as OrderStatus) && (
+                      <div className="mt-4 pt-3 border-t border-border">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                              disabled={cancellingId === order.id}
+                            >
+                              <XCircle className="w-4 h-4 mr-2" />
+                              {cancellingId === order.id ? 'Cancelling...' : 'Cancel Order'}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to cancel this order? This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Keep Order</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => cancelOrder(order.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Yes, Cancel Order
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )}
+
+                    {/* Reorder Button for completed/cancelled orders */}
+                    {(isDelivered || isCancelled) && (
+                      <div className="mt-4 pt-3 border-t border-border">
+                        <Link to={`/shop/${order.restaurant_id}`}>
+                          <Button variant="outline" className="w-full">
+                            <RotateCcw className="w-4 h-4 mr-2" />
+                            Order Again
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
