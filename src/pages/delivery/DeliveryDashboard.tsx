@@ -10,6 +10,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { 
   Bike, 
   ArrowLeft, 
@@ -30,7 +41,8 @@ import {
   TrendingUp,
   User,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -343,6 +355,22 @@ export default function DeliveryDashboard() {
     }
   };
 
+  const cancelOrder = async (orderId: string) => {
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'cancelled' })
+      .eq('id', orderId);
+
+    if (error) {
+      toast.error('Failed to cancel order');
+    } else {
+      toast.success('Order cancelled');
+      setDeliveryOtpInputs(prev => ({ ...prev, [orderId]: '' }));
+      setDeliveryOtpErrors(prev => ({ ...prev, [orderId]: false }));
+      fetchData();
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -604,12 +632,6 @@ export default function DeliveryDashboard() {
                     </div>
 
                     <div className="space-y-3">
-                      {currentOrder.status === 'picked_up' && (
-                        <Button className="w-full" onClick={() => updateOrderStatus(currentOrder.id, 'on_the_way')}>
-                          <Navigation className="w-4 h-4 mr-2" />
-                          Start Delivery
-                        </Button>
-                      )}
                       {currentOrder.status === 'on_the_way' && (
                         <div className="space-y-3">
                           <div className="p-3 bg-card rounded-lg border-2 border-primary/20">
@@ -635,15 +657,73 @@ export default function DeliveryDashboard() {
                               </div>
                             )}
                           </div>
-                          <Button 
-                            className="w-full" 
-                            variant="success" 
-                            onClick={() => verifyAndDeliver(currentOrder)}
-                            disabled={(deliveryOtpInputs[currentOrder.id] || '').length !== 4}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Verify & Mark Delivered
+                          <div className="flex gap-2">
+                            <Button 
+                              className="flex-1" 
+                              variant="success" 
+                              onClick={() => verifyAndDeliver(currentOrder)}
+                              disabled={(deliveryOtpInputs[currentOrder.id] || '').length !== 4}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Verify & Deliver
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="icon">
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Cancel Delivery</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to cancel this delivery? This will mark the order as cancelled.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>No, Keep Delivery</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => cancelOrder(currentOrder.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Yes, Cancel
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                      )}
+                      {currentOrder.status === 'picked_up' && (
+                        <div className="flex gap-2">
+                          <Button className="flex-1" onClick={() => updateOrderStatus(currentOrder.id, 'on_the_way')}>
+                            <Navigation className="w-4 h-4 mr-2" />
+                            Start Delivery
                           </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="icon">
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Cancel Delivery</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to cancel this delivery? This will mark the order as cancelled.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>No, Keep Delivery</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => cancelOrder(currentOrder.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Yes, Cancel
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       )}
                     </div>

@@ -9,6 +9,17 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { 
   Shield, 
   Store, 
@@ -135,6 +146,20 @@ export default function AdminDashboard() {
     } else {
       toast.success('Commission rate updated');
       setCommissionUpdates((prev) => ({ ...prev, [restaurantId]: '' }));
+      fetchData();
+    }
+  };
+
+  const cancelOrder = async (orderId: string) => {
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'cancelled' })
+      .eq('id', orderId);
+
+    if (error) {
+      toast.error('Failed to cancel order');
+    } else {
+      toast.success('Order cancelled');
       fetchData();
     }
   };
@@ -325,6 +350,7 @@ export default function AdminDashboard() {
                         <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Status</th>
                         <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Amount</th>
                         <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Date</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -343,6 +369,35 @@ export default function AdminDashboard() {
                           <td className="py-3 px-2 font-medium">₹{Number(order.total_amount).toFixed(2)}</td>
                           <td className="py-3 px-2 text-sm text-muted-foreground">
                             {format(new Date(order.created_at), 'MMM d, h:mm a')}
+                          </td>
+                          <td className="py-3 px-2">
+                            {!['delivered', 'cancelled'].includes(order.status) && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="destructive" size="sm">
+                                    <X className="w-3 h-3 mr-1" />
+                                    Cancel
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Cancel Order</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to cancel order #{order.id.slice(0, 8)}? This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => cancelOrder(order.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Yes, Cancel Order
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </td>
                         </tr>
                       ))}
