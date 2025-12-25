@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      customer_addresses: {
+        Row: {
+          address: string
+          created_at: string
+          id: string
+          is_default: boolean | null
+          label: string
+          lat: number | null
+          lng: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          label?: string
+          lat?: number | null
+          lng?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          label?: string
+          lat?: number | null
+          lng?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       delivery_partners: {
         Row: {
           created_at: string
@@ -55,6 +91,35 @@ export type Database = {
           verification_otp?: string | null
         }
         Relationships: []
+      }
+      favourite_shops: {
+        Row: {
+          created_at: string
+          id: string
+          restaurant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          restaurant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          restaurant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "favourite_shops_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       menu_items: {
         Row: {
@@ -155,10 +220,12 @@ export type Database = {
           delivery_otp: string | null
           delivery_partner_id: string | null
           id: string
+          is_scheduled: boolean | null
           notes: string | null
           payment_method: string
           pickup_otp: string | null
           restaurant_id: string
+          scheduled_at: string | null
           status: Database["public"]["Enums"]["order_status"]
           total_amount: number
           updated_at: string
@@ -172,10 +239,12 @@ export type Database = {
           delivery_otp?: string | null
           delivery_partner_id?: string | null
           id?: string
+          is_scheduled?: boolean | null
           notes?: string | null
           payment_method?: string
           pickup_otp?: string | null
           restaurant_id: string
+          scheduled_at?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           total_amount: number
           updated_at?: string
@@ -189,10 +258,12 @@ export type Database = {
           delivery_otp?: string | null
           delivery_partner_id?: string | null
           id?: string
+          is_scheduled?: boolean | null
           notes?: string | null
           payment_method?: string
           pickup_otp?: string | null
           restaurant_id?: string
+          scheduled_at?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           total_amount?: number
           updated_at?: string
@@ -247,6 +318,7 @@ export type Database = {
       restaurants: {
         Row: {
           address: string
+          category: string | null
           commission_rate: number
           created_at: string
           cuisine_type: string | null
@@ -262,6 +334,7 @@ export type Database = {
         }
         Insert: {
           address: string
+          category?: string | null
           commission_rate?: number
           created_at?: string
           cuisine_type?: string | null
@@ -277,6 +350,7 @@ export type Database = {
         }
         Update: {
           address?: string
+          category?: string | null
           commission_rate?: number
           created_at?: string
           cuisine_type?: string | null
@@ -341,6 +415,15 @@ export type Database = {
         | "on_the_way"
         | "delivered"
         | "cancelled"
+      shop_category:
+        | "food"
+        | "grocery"
+        | "fruits"
+        | "vegetables"
+        | "meat"
+        | "medicine"
+        | "bakery"
+        | "beverages"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -483,6 +566,16 @@ export const Constants = {
         "on_the_way",
         "delivered",
         "cancelled",
+      ],
+      shop_category: [
+        "food",
+        "grocery",
+        "fruits",
+        "vegetables",
+        "meat",
+        "medicine",
+        "bakery",
+        "beverages",
       ],
     },
   },

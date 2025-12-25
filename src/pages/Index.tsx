@@ -6,7 +6,10 @@ import { Restaurant } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCartStore } from '@/stores/cartStore';
+import { CategoryTabs, CategoryType } from '@/components/CategoryTabs';
+import { FavouriteButton } from '@/components/FavouriteButton';
 import { 
   Search, 
   MapPin, 
@@ -18,20 +21,30 @@ import {
   Shield,
   Store,
   Bike,
-  ChevronRight
+  ChevronRight,
+  Heart
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Index() {
   const { user, signOut, hasRole, loading: authLoading } = useAuth();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [favouriteIds, setFavouriteIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'favourites'>('all');
   const [loading, setLoading] = useState(true);
   const cartItems = useCartStore((state) => state.getTotalItems());
 
   useEffect(() => {
     fetchRestaurants();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchFavourites();
+    }
+  }, [user]);
 
   const fetchRestaurants = async () => {
     const { data, error } = await supabase
@@ -48,10 +61,32 @@ export default function Index() {
     setLoading(false);
   };
 
-  const filteredRestaurants = restaurants.filter((restaurant) =>
-    restaurant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    restaurant.cuisine_type?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const fetchFavourites = async () => {
+    const { data } = await supabase
+      .from('favourite_shops')
+      .select('restaurant_id')
+      .eq('user_id', user!.id);
+    
+    if (data) {
+      setFavouriteIds(data.map(f => f.restaurant_id));
+    }
+  };
+
+  const filteredRestaurants = restaurants.filter((restaurant) => {
+    const matchesSearch = 
+      restaurant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      restaurant.cuisine_type?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesCategory = 
+      selectedCategory === 'all' || 
+      (restaurant.category || 'food') === selectedCategory;
+    
+    const matchesFavourites = 
+      activeTab === 'all' || 
+      favouriteIds.includes(restaurant.id);
+    
+    return matchesSearch && matchesCategory && matchesFavourites;
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -161,11 +196,33 @@ export default function Index() {
         <div className="absolute bottom-10 right-10 w-32 h-32 bg-accent/10 rounded-full blur-3xl" />
       </section>
 
+      {/* Categories */}
+      <section className="py-4 bg-card/50 border-b border-border">
+        <div className="container mx-auto">
+          <CategoryTabs selected={selectedCategory} onSelect={setSelectedCategory} />
+        </div>
+      </section>
+
       {/* Restaurants Grid */}
-      <section className="py-12">
+      <section className="py-8">
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold text-foreground">Nearby Shops</h2>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <h2 className="text-2xl font-bold text-foreground">
+                {selectedCategory === 'all' ? 'All Shops' : `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Shops`}
+              </h2>
+              {user && (
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'all' | 'favourites')}>
+                  <TabsList className="h-9">
+                    <TabsTrigger value="all" className="text-xs px-3">All</TabsTrigger>
+                    <TabsTrigger value="favourites" className="text-xs px-3 gap-1">
+                      <Heart className="w-3 h-3" />
+                      Favourites
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
+            </div>
             {filteredRestaurants.length > 0 && (
               <span className="text-sm text-muted-foreground">
                 {filteredRestaurants.length} shops
@@ -218,13 +275,24 @@ export default function Index() {
                         </div>
                       )}
                       {/* Open/Closed Badge */}
-                      <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-medium ${
+                      <div className={`absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-medium ${
                         restaurant.is_open 
                           ? 'bg-accent text-accent-foreground' 
                           : 'bg-muted text-muted-foreground'
                       }`}>
                         {restaurant.is_open ? 'Open' : 'Closed'}
                       </div>
+                      {/* Category Badge */}
+                      <div className="absolute top-3 right-12 px-2 py-1 rounded-full text-xs font-medium bg-card/80 text-foreground capitalize">
+                        {restaurant.category || 'food'}
+                      </div>
+                      {/* Favourite Button */}
+                      {user && (
+                        <FavouriteButton
+                          restaurantId={restaurant.id}
+                          className="absolute top-2 right-2"
+                        />
+                      )}
                     </div>
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between mb-2">

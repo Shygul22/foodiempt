@@ -5,17 +5,17 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCartStore } from '@/stores/cartStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { AddressSelector } from '@/components/AddressSelector';
+import { ScheduleDelivery } from '@/components/ScheduleDelivery';
 import { 
   ArrowLeft, 
   Minus, 
   Plus, 
   Trash2, 
   ShoppingBag,
-  MapPin,
   Banknote,
   Smartphone
 } from 'lucide-react';
@@ -30,7 +30,14 @@ export default function Cart() {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const handleScheduleChange = (scheduled: boolean, date: Date | null) => {
+    setIsScheduled(scheduled);
+    setScheduledAt(date);
+  };
 
   const handleCheckout = async () => {
     if (!user) {
@@ -63,6 +70,8 @@ export default function Cart() {
           notes: notes || null,
           status: 'pending',
           payment_method: paymentMethod,
+          is_scheduled: isScheduled,
+          scheduled_at: scheduledAt?.toISOString() || null,
         })
         .select()
         .single();
@@ -191,19 +200,16 @@ export default function Cart() {
                 <CardTitle>Order Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="address">Delivery Address</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="address"
-                      placeholder="Enter your address"
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
+                <AddressSelector
+                  selectedAddress={deliveryAddress}
+                  onAddressChange={setDeliveryAddress}
+                />
+
+                <ScheduleDelivery
+                  isScheduled={isScheduled}
+                  scheduledAt={scheduledAt}
+                  onScheduleChange={handleScheduleChange}
+                />
 
                 <div className="space-y-2">
                   <Label htmlFor="notes">Order Notes (optional)</Label>
