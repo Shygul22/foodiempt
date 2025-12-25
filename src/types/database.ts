@@ -1,5 +1,7 @@
 export type AppRole = 'super_admin' | 'restaurant_owner' | 'delivery_partner' | 'customer';
 
+export type ShopCategory = 'food' | 'grocery' | 'fruits' | 'vegetables' | 'meat' | 'medicine' | 'bakery' | 'beverages';
+
 export type OrderStatus = 
   | 'pending' 
   | 'confirmed' 
@@ -29,6 +31,7 @@ export interface Restaurant {
   phone: string | null;
   image_url: string | null;
   cuisine_type: string | null;
+  category: string;
   is_verified: boolean;
   is_open: boolean;
   commission_rate: number;
@@ -79,6 +82,8 @@ export interface Order {
   payment_method: string;
   delivery_otp: string | null;
   pickup_otp: string | null;
+  scheduled_at: string | null;
+  is_scheduled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -95,4 +100,23 @@ export interface OrderItem {
 export interface CartItem {
   menuItem: MenuItem;
   quantity: number;
+}
+
+export interface CustomerAddress {
+  id: string;
+  user_id: string;
+  label: string;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FavouriteShop {
+  id: string;
+  user_id: string;
+  restaurant_id: string;
+  created_at: string;
 }
