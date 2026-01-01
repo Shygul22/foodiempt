@@ -79,6 +79,9 @@ export default function Cart() {
     return { distance: null, deliveryFee: 25 };
   }, [latitude, longitude, restaurant]);
 
+  // Platform fee
+  const platformFee = 8;
+
   const handleScheduleChange = (scheduled: boolean, date: Date | null) => {
     setIsScheduled(scheduled);
     setScheduledAt(date);
@@ -117,7 +120,7 @@ export default function Cart() {
         .insert({
           customer_id: user.id,
           restaurant_id: restaurantId!,
-          total_amount: subtotal + finalDeliveryFee,
+          total_amount: subtotal + finalDeliveryFee + platformFee,
           delivery_address: deliveryAddress,
           delivery_lat: latitude,
           delivery_lng: longitude,
@@ -369,9 +372,13 @@ export default function Cart() {
                       <span className="text-accent font-medium">-₹{deliveryFee}</span>
                     </div>
                   )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Platform Fee</span>
+                    <span>₹{platformFee}</span>
+                  </div>
                   <div className="flex justify-between font-bold text-lg pt-2 border-t">
                     <span>Total</span>
-                    <span className="text-primary">₹{(subtotal + finalDeliveryFee).toFixed(0)}</span>
+                    <span className="text-primary">₹{(subtotal + finalDeliveryFee + platformFee).toFixed(0)}</span>
                   </div>
                 </div>
 
@@ -381,7 +388,7 @@ export default function Cart() {
                   onClick={handleCheckout}
                   disabled={loading}
                 >
-                  {loading ? 'Placing Order...' : `Place Order • ₹${(subtotal + finalDeliveryFee).toFixed(0)}`}
+                  {loading ? 'Placing Order...' : `Place Order • ₹${(subtotal + finalDeliveryFee + platformFee).toFixed(0)}`}
                 </Button>
               </CardContent>
             </Card>

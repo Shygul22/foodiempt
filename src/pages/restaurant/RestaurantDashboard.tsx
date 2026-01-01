@@ -40,7 +40,11 @@ import {
   History,
   TrendingUp,
   IndianRupee,
-  Wallet
+  Wallet,
+  MapPin,
+  Navigation,
+  Loader2,
+  Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -76,7 +80,10 @@ export default function RestaurantDashboard() {
     phone: '',
     cuisine_type: '',
     image_url: '',
+    lat: '',
+    lng: '',
   });
+  const [detectingLocation, setDetectingLocation] = useState(false);
 
   const [menuItemForm, setMenuItemForm] = useState({
     name: '',
@@ -222,7 +229,14 @@ export default function RestaurantDashboard() {
       .from('restaurants')
       .insert({
         owner_id: user!.id,
-        ...restaurantForm,
+        name: restaurantForm.name,
+        description: restaurantForm.description || null,
+        address: restaurantForm.address,
+        phone: restaurantForm.phone || null,
+        cuisine_type: restaurantForm.cuisine_type || null,
+        image_url: restaurantForm.image_url || null,
+        lat: restaurantForm.lat ? parseFloat(restaurantForm.lat) : null,
+        lng: restaurantForm.lng ? parseFloat(restaurantForm.lng) : null,
       })
       .select()
       .single();
@@ -239,6 +253,54 @@ export default function RestaurantDashboard() {
       setRestaurant(data);
       setShowCreateRestaurant(false);
       toast.success('Shop created! Awaiting admin verification.');
+    }
+  };
+
+  const detectCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setRestaurantForm(prev => ({
+          ...prev,
+          lat: position.coords.latitude.toString(),
+          lng: position.coords.longitude.toString(),
+        }));
+        setDetectingLocation(false);
+        toast.success('Location detected!');
+      },
+      (error) => {
+        setDetectingLocation(false);
+        toast.error('Failed to get location: ' + error.message);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+
+  const updateShopLocation = async () => {
+    if (!restaurant) return;
+
+    const { error } = await supabase
+      .from('restaurants')
+      .update({
+        lat: restaurantForm.lat ? parseFloat(restaurantForm.lat) : null,
+        lng: restaurantForm.lng ? parseFloat(restaurantForm.lng) : null,
+      })
+      .eq('id', restaurant.id);
+
+    if (error) {
+      toast.error('Failed to update location');
+    } else {
+      setRestaurant(prev => prev ? { 
+        ...prev, 
+        lat: restaurantForm.lat ? parseFloat(restaurantForm.lat) : null,
+        lng: restaurantForm.lng ? parseFloat(restaurantForm.lng) : null,
+      } : null);
+      toast.success('Shop location updated!');
     }
   };
 
@@ -435,6 +497,63 @@ export default function RestaurantDashboard() {
                   placeholder="https://..."
                 />
               </div>
+
+              {/* Location Section */}
+              <div className="space-y-3 p-3 bg-secondary/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    Shop Location
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={detectCurrentLocation}
+                    disabled={detectingLocation}
+                    className="gap-1"
+                  >
+                    {detectingLocation ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Navigation className="w-3 h-3" />
+                    )}
+                    Detect
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Latitude</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={restaurantForm.lat}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, lat: e.target.value })}
+                      placeholder="12.9716"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Longitude</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={restaurantForm.lng}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, lng: e.target.value })}
+                      placeholder="77.5946"
+                    />
+                  </div>
+                </div>
+                {restaurantForm.lat && restaurantForm.lng && (
+                  <p className="text-xs text-accent flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    Location set successfully
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Location helps customers find your shop and calculate delivery distance
+                </p>
+              </div>
+
               <Button className="w-full" onClick={createRestaurant}>
                 Register Shop
               </Button>
@@ -482,10 +601,10 @@ export default function RestaurantDashboard() {
 
       <div className="container mx-auto px-4 py-6">
         <Tabs defaultValue="orders" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="orders" className="relative gap-2">
               <Package className="w-4 h-4" />
-              Orders
+              <span className="hidden sm:inline">Orders</span>
               {pendingOrders.length > 0 && (
                 <span className="w-5 h-5 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
                   {pendingOrders.length}
@@ -494,15 +613,19 @@ export default function RestaurantDashboard() {
             </TabsTrigger>
             <TabsTrigger value="menu" className="gap-2">
               <Edit className="w-4 h-4" />
-              Menu
+              <span className="hidden sm:inline">Menu</span>
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <History className="w-4 h-4" />
-              History
+              <span className="hidden sm:inline">History</span>
             </TabsTrigger>
             <TabsTrigger value="earnings" className="gap-2">
               <Wallet className="w-4 h-4" />
-              Earnings
+              <span className="hidden sm:inline">Earnings</span>
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2">
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>
           </TabsList>
 
@@ -962,6 +1085,107 @@ export default function RestaurantDashboard() {
                 <p className="text-xs text-muted-foreground mt-2">
                   Commission is deducted from each order. Settlements are processed weekly.
                 </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="space-y-6">
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  Shop Location
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Set your shop's GPS location so customers can see distance and get accurate delivery estimates.
+                </p>
+                
+                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium">Current Location</p>
+                    {restaurant?.lat && restaurant?.lng ? (
+                      <p className="text-xs text-accent flex items-center gap-1 mt-1">
+                        <MapPin className="w-3 h-3" />
+                        {Number(restaurant.lat).toFixed(4)}, {Number(restaurant.lng).toFixed(4)}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-1">Not set</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={detectCurrentLocation}
+                    disabled={detectingLocation}
+                    className="gap-1"
+                  >
+                    {detectingLocation ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Navigation className="w-3 h-3" />
+                    )}
+                    Detect Location
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Latitude</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={restaurantForm.lat}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, lat: e.target.value })}
+                      placeholder="12.9716"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Longitude</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={restaurantForm.lng}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, lng: e.target.value })}
+                      placeholder="77.5946"
+                    />
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={updateShopLocation} 
+                  disabled={!restaurantForm.lat || !restaurantForm.lng}
+                  className="w-full"
+                >
+                  Save Location
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Store className="w-4 h-4" />
+                  Shop Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Shop Name</span>
+                  <span className="font-medium">{restaurant?.name}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Address</span>
+                  <span className="font-medium text-sm text-right max-w-[200px] truncate">{restaurant?.address}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Verification Status</span>
+                  <span className={`font-medium ${restaurant?.is_verified ? 'text-accent' : 'text-status-pending'}`}>
+                    {restaurant?.is_verified ? 'Verified' : 'Pending'}
+                  </span>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
