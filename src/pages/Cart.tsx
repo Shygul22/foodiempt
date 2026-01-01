@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useGeolocation, calculateDistance, calculateDeliveryFee, formatDistance } from '@/hooks/useGeolocation';
 import { useCartStore } from '@/stores/cartStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Badge } from '@/components/ui/badge';
 import { AddressSelector } from '@/components/AddressSelector';
 import { ScheduleDelivery } from '@/components/ScheduleDelivery';
 import { 
@@ -17,7 +19,12 @@ import {
   Trash2, 
   ShoppingBag,
   Banknote,
-  Smartphone
+  Smartphone,
+  MapPin,
+  Bike,
+  Clock,
+  Zap,
+  Store
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,6 +33,7 @@ type PaymentMethod = 'cod' | 'gpay';
 export default function Cart() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { latitude, longitude } = useGeolocation();
   const { items, restaurantId, updateQuantity, removeItem, clearCart, getTotalAmount } = useCartStore();
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
@@ -33,11 +41,55 @@ export default function Cart() {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
+  const [restaurant, setRestaurant] = useState<{ lat: number | null; lng: number | null; name: string; address: string } | null>(null);
+
+  useEffect(() => {
+    if (restaurantId) {
+      fetchRestaurant();
+    }
+  }, [restaurantId]);
+
+  const fetchRestaurant = async () => {
+    const { data } = await supabase
+      .from('restaurants')
+      .select('lat, lng, name, address')
+      .eq('id', restaurantId!)
+      .single();
+    
+    if (data) {
+      setRestaurant(data);
+    }
+  };
+
+  // Calculate distance and delivery fee
+  const { distance, deliveryFee } = useMemo(() => {
+    if (latitude && longitude && restaurant?.lat && restaurant?.lng) {
+      const dist = calculateDistance(
+        latitude,
+        longitude,
+        Number(restaurant.lat),
+        Number(restaurant.lng)
+      );
+      return {
+        distance: dist,
+        deliveryFee: calculateDeliveryFee(dist)
+      };
+    }
+    // Default fee when location not available
+    return { distance: null, deliveryFee: 25 };
+  }, [latitude, longitude, restaurant]);
 
   const handleScheduleChange = (scheduled: boolean, date: Date | null) => {
     setIsScheduled(scheduled);
     setScheduledAt(date);
   };
+
+  // Free delivery threshold
+  const subtotal = getTotalAmount();
+  const freeDeliveryThreshold = 199;
+  const isFreeDelivery = subtotal >= freeDeliveryThreshold;
+  const finalDeliveryFee = isFreeDelivery ? 0 : deliveryFee;
+  const amountForFreeDelivery = freeDeliveryThreshold - subtotal;
 
   const handleCheckout = async () => {
     if (!user) {
@@ -65,8 +117,10 @@ export default function Cart() {
         .insert({
           customer_id: user.id,
           restaurant_id: restaurantId!,
-          total_amount: getTotalAmount(),
+          total_amount: subtotal + finalDeliveryFee,
           delivery_address: deliveryAddress,
+          delivery_lat: latitude,
+          delivery_lng: longitude,
           notes: notes || null,
           status: 'pending',
           payment_method: paymentMethod,
@@ -106,22 +160,22 @@ export default function Cart() {
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border">
-          <div className="container mx-auto px-4 py-4">
+        <header className="sticky top-0 z-50 bg-card border-b border-border">
+          <div className="container mx-auto px-4 py-3">
             <Link to="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors">
               <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <span className="text-sm font-medium">Back</span>
             </Link>
           </div>
         </header>
-        <div className="flex flex-col items-center justify-center py-24">
-          <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-6">
-            <ShoppingBag className="w-12 h-12 text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-4">
+            <ShoppingBag className="w-10 h-10 text-muted-foreground" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Your cart is empty</h2>
-          <p className="text-muted-foreground mb-6">Add some delicious items to get started</p>
+          <h2 className="text-xl font-bold mb-2">Your cart is empty</h2>
+          <p className="text-sm text-muted-foreground mb-6">Add items to get started</p>
           <Link to="/">
-            <Button variant="hero">Browse Shops</Button>
+            <Button className="rounded-full px-6">Browse Shops</Button>
           </Link>
         </div>
       </div>
@@ -130,61 +184,85 @@ export default function Cart() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors">
+      <header className="sticky top-0 z-50 bg-card border-b border-border">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Link to="/" className="flex items-center text-foreground hover:text-primary transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <h1 className="text-xl font-bold">Your Cart</h1>
+            <div>
+              <h1 className="text-lg font-bold">Your Cart</h1>
+              {restaurant && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Store className="w-3 h-3" />
+                  {restaurant.name}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-3 gap-6">
+      {/* Free Delivery Banner */}
+      {!isFreeDelivery && amountForFreeDelivery > 0 && (
+        <div className="bg-accent/10 border-b border-accent/20">
+          <div className="container mx-auto px-4 py-2">
+            <p className="text-xs text-center">
+              <Zap className="w-3 h-3 inline mr-1 text-accent" />
+              Add <span className="font-bold text-accent">₹{amountForFreeDelivery.toFixed(0)}</span> more for <span className="font-bold text-accent">FREE delivery</span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="container mx-auto px-4 py-4">
+        <div className="grid lg:grid-cols-3 gap-4">
           {/* Cart Items */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-2 space-y-3">
             {items.map((item) => (
               <Card key={item.menuItem.id} className="overflow-hidden border-0 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    {item.menuItem.image_url && (
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-3">
+                    {item.menuItem.image_url ? (
                       <img
                         src={item.menuItem.image_url}
                         alt={item.menuItem.name}
-                        className="w-20 h-20 object-cover rounded-lg"
+                        className="w-16 h-16 object-cover rounded-lg"
                       />
+                    ) : (
+                      <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
+                        <ShoppingBag className="w-6 h-6 text-muted-foreground" />
+                      </div>
                     )}
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{item.menuItem.name}</h3>
-                      <p className="text-primary font-bold">₹{Number(item.menuItem.price).toFixed(2)}</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-sm line-clamp-1">{item.menuItem.name}</h3>
+                      <p className="text-primary font-bold text-sm">₹{Number(item.menuItem.price).toFixed(0)}</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <Button
                         size="icon"
                         variant="outline"
-                        className="h-8 w-8"
+                        className="h-7 w-7 rounded-full"
                         onClick={() => updateQuantity(item.menuItem.id, item.quantity - 1)}
                       >
-                        <Minus className="w-4 h-4" />
+                        <Minus className="w-3 h-3" />
                       </Button>
-                      <span className="w-8 text-center font-medium">{item.quantity}</span>
+                      <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
                       <Button
                         size="icon"
                         variant="outline"
-                        className="h-8 w-8"
+                        className="h-7 w-7 rounded-full"
                         onClick={() => updateQuantity(item.menuItem.id, item.quantity + 1)}
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-3 h-3" />
                       </Button>
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
                         onClick={() => removeItem(item.menuItem.id)}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -195,9 +273,9 @@ export default function Cart() {
 
           {/* Order Summary */}
           <div className="lg:col-span-1">
-            <Card className="sticky top-24 border-0 shadow-md">
-              <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
+            <Card className="sticky top-20 border-0 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Order Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <AddressSelector
@@ -212,65 +290,98 @@ export default function Cart() {
                 />
 
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Order Notes (optional)</Label>
+                  <Label htmlFor="notes" className="text-xs">Order Notes (optional)</Label>
                   <Textarea
                     id="notes"
                     placeholder="Any special instructions..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
+                    rows={2}
+                    className="text-sm"
                   />
                 </div>
 
                 {/* Payment Method */}
-                <div className="space-y-3">
-                  <Label>Payment Method</Label>
+                <div className="space-y-2">
+                  <Label className="text-xs">Payment Method</Label>
                   <RadioGroup value={paymentMethod} onValueChange={(val) => setPaymentMethod(val as PaymentMethod)}>
-                    <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer">
+                    <div className="flex items-center space-x-2 p-2.5 border rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer">
                       <RadioGroupItem value="cod" id="cod" />
-                      <Label htmlFor="cod" className="flex items-center gap-2 cursor-pointer flex-1">
-                        <Banknote className="w-5 h-5 text-accent" />
-                        <div>
-                          <p className="font-medium">Cash on Delivery</p>
-                          <p className="text-xs text-muted-foreground">Pay when your order arrives</p>
-                        </div>
+                      <Label htmlFor="cod" className="flex items-center gap-2 cursor-pointer flex-1 text-sm">
+                        <Banknote className="w-4 h-4 text-accent" />
+                        <span>Cash on Delivery</span>
                       </Label>
                     </div>
-                    <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer">
+                    <div className="flex items-center space-x-2 p-2.5 border rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer">
                       <RadioGroupItem value="gpay" id="gpay" />
-                      <Label htmlFor="gpay" className="flex items-center gap-2 cursor-pointer flex-1">
-                        <Smartphone className="w-5 h-5 text-primary" />
-                        <div>
-                          <p className="font-medium">Google Pay</p>
-                          <p className="text-xs text-muted-foreground">Pay via GPay at delivery</p>
-                        </div>
+                      <Label htmlFor="gpay" className="flex items-center gap-2 cursor-pointer flex-1 text-sm">
+                        <Smartphone className="w-4 h-4 text-primary" />
+                        <span>Google Pay</span>
                       </Label>
                     </div>
                   </RadioGroup>
                 </div>
 
-                <div className="border-t pt-4 space-y-2">
+                {/* Delivery Info */}
+                {distance !== null && (
+                  <div className="bg-secondary/50 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <MapPin className="w-3.5 h-3.5" />
+                        Distance
+                      </span>
+                      <span className="font-medium">{formatDistance(distance)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5" />
+                        Est. delivery
+                      </span>
+                      <span className="font-medium">20-30 min</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Price Breakdown */}
+                <div className="border-t pt-3 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>₹{getTotalAmount().toFixed(2)}</span>
+                    <span>₹{subtotal.toFixed(0)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Delivery Fee</span>
-                    <span>₹49</span>
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Bike className="w-3.5 h-3.5" />
+                      Delivery Fee
+                      {distance !== null && (
+                        <span className="text-[10px] text-muted-foreground">({formatDistance(distance)})</span>
+                      )}
+                    </span>
+                    <span className={isFreeDelivery ? 'text-accent line-through' : ''}>
+                      ₹{deliveryFee}
+                    </span>
                   </div>
+                  {isFreeDelivery && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-accent flex items-center gap-1">
+                        <Zap className="w-3.5 h-3.5" />
+                        Free Delivery!
+                      </span>
+                      <span className="text-accent font-medium">-₹{deliveryFee}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-lg pt-2 border-t">
                     <span>Total</span>
-                    <span className="text-primary">₹{(getTotalAmount() + 49).toFixed(2)}</span>
+                    <span className="text-primary">₹{(subtotal + finalDeliveryFee).toFixed(0)}</span>
                   </div>
                 </div>
 
                 <Button
-                  className="w-full"
+                  className="w-full rounded-full"
                   size="lg"
                   onClick={handleCheckout}
                   disabled={loading}
                 >
-                  {loading ? 'Placing Order...' : 'Place Order'}
+                  {loading ? 'Placing Order...' : `Place Order • ₹${(subtotal + finalDeliveryFee).toFixed(0)}`}
                 </Button>
               </CardContent>
             </Card>

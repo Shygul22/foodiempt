@@ -327,6 +327,8 @@ export type Database = {
           image_url: string | null
           is_open: boolean
           is_verified: boolean
+          lat: number | null
+          lng: number | null
           name: string
           owner_id: string
           phone: string | null
@@ -343,6 +345,8 @@ export type Database = {
           image_url?: string | null
           is_open?: boolean
           is_verified?: boolean
+          lat?: number | null
+          lng?: number | null
           name: string
           owner_id: string
           phone?: string | null
@@ -359,6 +363,8 @@ export type Database = {
           image_url?: string | null
           is_open?: boolean
           is_verified?: boolean
+          lat?: number | null
+          lng?: number | null
           name?: string
           owner_id?: string
           phone?: string | null
