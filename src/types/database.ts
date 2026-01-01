@@ -32,6 +32,8 @@ export interface Restaurant {
   image_url: string | null;
   cuisine_type: string | null;
   category: string;
+  lat: number | null;
+  lng: number | null;
   is_verified: boolean;
   is_open: boolean;
   commission_rate: number;
