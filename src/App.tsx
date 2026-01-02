@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import RestaurantDetail from "./pages/RestaurantDetail";
 import Cart from "./pages/Cart";
 import Orders from "./pages/Orders";
+import OrderTracking from "./pages/OrderTracking";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import RestaurantDashboard from "./pages/restaurant/RestaurantDashboard";
 import DeliveryDashboard from "./pages/delivery/DeliveryDashboard";
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/restaurant/:id" element={<RestaurantDetail />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/orders" element={<Orders />} />
+            <Route path="/order/:orderId" element={<OrderTracking />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/restaurant" element={<RestaurantDashboard />} />
             <Route path="/delivery" element={<DeliveryDashboard />} />
