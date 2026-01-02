@@ -165,24 +165,26 @@ export default function Orders() {
               return (
                 <Card key={order.id} className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow">
                   <CardContent className="p-4">
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">
-                            {order.restaurants?.name || 'Unknown Shop'}
-                          </h3>
-                          <span className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">
-                            {getShortOrderId(order.id)}
-                          </span>
+                    {/* Header - Clickable for tracking */}
+                    <Link to={`/order/${order.id}`} className="block">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-lg hover:text-primary transition-colors">
+                              {order.restaurants?.name || 'Unknown Shop'}
+                            </h3>
+                            <span className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">
+                              {getShortOrderId(order.id)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                            <Clock className="w-4 h-4" />
+                            <span>{format(new Date(order.created_at), 'MMM d, yyyy h:mm a')}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                          <Clock className="w-4 h-4" />
-                          <span>{format(new Date(order.created_at), 'MMM d, yyyy h:mm a')}</span>
-                        </div>
+                        <StatusBadge status={order.status as OrderStatus} />
                       </div>
-                      <StatusBadge status={order.status as OrderStatus} />
-                    </div>
+                    </Link>
 
                     {/* Order Tracking Steps for Active Orders */}
                     {isActive && (
