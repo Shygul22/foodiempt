@@ -1,8 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useGeolocation, calculateDistance, calculateDeliveryFee, formatDistance } from '@/hooks/useGeolocation';
 import { useCartStore } from '@/stores/cartStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,7 +32,6 @@ type PaymentMethod = 'cod' | 'gpay';
 export default function Cart() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { latitude, longitude } = useGeolocation();
   const { items, restaurantId, updateQuantity, removeItem, clearCart, getTotalAmount } = useCartStore();
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
@@ -41,7 +39,7 @@ export default function Cart() {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
-  const [restaurant, setRestaurant] = useState<{ lat: number | null; lng: number | null; name: string; address: string } | null>(null);
+  const [restaurant, setRestaurant] = useState<{ name: string; address: string } | null>(null);
 
   useEffect(() => {
     if (restaurantId) {
@@ -52,7 +50,7 @@ export default function Cart() {
   const fetchRestaurant = async () => {
     const { data } = await supabase
       .from('restaurants')
-      .select('lat, lng, name, address')
+      .select('name, address')
       .eq('id', restaurantId!)
       .single();
     
@@ -61,23 +59,8 @@ export default function Cart() {
     }
   };
 
-  // Calculate distance and delivery fee
-  const { distance, deliveryFee } = useMemo(() => {
-    if (latitude && longitude && restaurant?.lat && restaurant?.lng) {
-      const dist = calculateDistance(
-        latitude,
-        longitude,
-        Number(restaurant.lat),
-        Number(restaurant.lng)
-      );
-      return {
-        distance: dist,
-        deliveryFee: calculateDeliveryFee(dist)
-      };
-    }
-    // Default fee when location not available
-    return { distance: null, deliveryFee: 25 };
-  }, [latitude, longitude, restaurant]);
+  // Fixed delivery fee
+  const deliveryFee = 25;
 
   // Platform fee
   const platformFee = 8;
@@ -122,8 +105,6 @@ export default function Cart() {
           restaurant_id: restaurantId!,
           total_amount: subtotal + finalDeliveryFee + platformFee,
           delivery_address: deliveryAddress,
-          delivery_lat: latitude,
-          delivery_lng: longitude,
           notes: notes || null,
           status: 'pending',
           payment_method: paymentMethod,
@@ -326,24 +307,15 @@ export default function Cart() {
                 </div>
 
                 {/* Delivery Info */}
-                {distance !== null && (
-                  <div className="bg-secondary/50 rounded-lg p-3 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <MapPin className="w-3.5 h-3.5" />
-                        Distance
-                      </span>
-                      <span className="font-medium">{formatDistance(distance)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <Clock className="w-3.5 h-3.5" />
-                        Est. delivery
-                      </span>
-                      <span className="font-medium">20-30 min</span>
-                    </div>
+                <div className="bg-secondary/50 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Clock className="w-3.5 h-3.5" />
+                      Est. delivery
+                    </span>
+                    <span className="font-medium">20-30 min</span>
                   </div>
-                )}
+                </div>
 
                 {/* Price Breakdown */}
                 <div className="border-t pt-3 space-y-2">
@@ -355,9 +327,6 @@ export default function Cart() {
                     <span className="text-muted-foreground flex items-center gap-1">
                       <Bike className="w-3.5 h-3.5" />
                       Delivery Fee
-                      {distance !== null && (
-                        <span className="text-[10px] text-muted-foreground">({formatDistance(distance)})</span>
-                      )}
                     </span>
                     <span className={isFreeDelivery ? 'text-accent line-through' : ''}>
                       ₹{deliveryFee}

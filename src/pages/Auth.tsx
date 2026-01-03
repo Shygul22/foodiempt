@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Utensils, Mail, Lock, User } from 'lucide-react';
+import { Utensils, Mail, Lock, User, Chrome } from 'lucide-react';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
 
@@ -65,6 +68,21 @@ export default function Auth() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+    
+    if (error) {
+      toast.error(error.message);
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-secondary p-4">
       <div className="w-full max-w-md animate-scale-in">
@@ -87,7 +105,27 @@ export default function Auth() {
               <TabsContent value="signin" className="mt-6">
                 <CardTitle className="text-xl">Welcome back</CardTitle>
                 <CardDescription>Enter your credentials to access your account</CardDescription>
-                <form onSubmit={handleSignIn} className="space-y-4 mt-4">
+                
+                {/* Google Sign In */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full mt-4 gap-2"
+                  onClick={handleGoogleSignIn}
+                  disabled={googleLoading}
+                >
+                  <Chrome className="w-4 h-4" />
+                  {googleLoading ? 'Connecting...' : 'Continue with Google'}
+                </Button>
+                
+                <div className="relative my-4">
+                  <Separator />
+                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                    or
+                  </span>
+                </div>
+
+                <form onSubmit={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signin-email">Email</Label>
                     <div className="relative">
@@ -125,7 +163,27 @@ export default function Auth() {
               <TabsContent value="signup" className="mt-6">
                 <CardTitle className="text-xl">Create account</CardTitle>
                 <CardDescription>Join FoodDash to start ordering</CardDescription>
-                <form onSubmit={handleSignUp} className="space-y-4 mt-4">
+                
+                {/* Google Sign Up */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full mt-4 gap-2"
+                  onClick={handleGoogleSignIn}
+                  disabled={googleLoading}
+                >
+                  <Chrome className="w-4 h-4" />
+                  {googleLoading ? 'Connecting...' : 'Continue with Google'}
+                </Button>
+                
+                <div className="relative my-4">
+                  <Separator />
+                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                    or
+                  </span>
+                </div>
+
+                <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signup-name">Full Name</Label>
                     <div className="relative">
