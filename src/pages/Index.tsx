@@ -1,7 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useGeolocation, calculateDistance, formatDistance, estimateDeliveryTime } from '@/hooks/useGeolocation';
 import { supabase } from '@/integrations/supabase/client';
 import { Restaurant } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -31,21 +30,15 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Restaurant with calculated distance
-interface RestaurantWithDistance extends Restaurant {
-  distance?: number;
-  deliveryTime?: string;
-}
-
 export default function Index() {
   const { user, signOut, hasRole, loading: authLoading } = useAuth();
-  const { latitude, longitude, loading: locationLoading, error: locationError, refresh: refreshLocation } = useGeolocation();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [favouriteIds, setFavouriteIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
   const [activeTab, setActiveTab] = useState<'all' | 'favourites'>('all');
   const [loading, setLoading] = useState(true);
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const cartItems = useCartStore((state) => state.getTotalItems());
 
   useEffect(() => {
@@ -84,33 +77,7 @@ export default function Index() {
     }
   };
 
-  // Calculate distances and sort by nearest
-  const restaurantsWithDistance: RestaurantWithDistance[] = useMemo(() => {
-    return restaurants.map(restaurant => {
-      let distance: number | undefined;
-      let deliveryTime: string | undefined;
-      
-      if (latitude && longitude && restaurant.lat && restaurant.lng) {
-        distance = calculateDistance(
-          latitude,
-          longitude,
-          Number(restaurant.lat),
-          Number(restaurant.lng)
-        );
-        deliveryTime = estimateDeliveryTime(distance);
-      }
-      
-      return { ...restaurant, distance, deliveryTime };
-    }).sort((a, b) => {
-      // Sort by distance if available, otherwise keep original order
-      if (a.distance !== undefined && b.distance !== undefined) {
-        return a.distance - b.distance;
-      }
-      return 0;
-    });
-  }, [restaurants, latitude, longitude]);
-
-  const filteredRestaurants = restaurantsWithDistance.filter((restaurant) => {
+  const filteredRestaurants = restaurants.filter((restaurant) => {
     const matchesSearch = 
       restaurant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       restaurant.cuisine_type?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -123,10 +90,7 @@ export default function Index() {
       activeTab === 'all' || 
       favouriteIds.includes(restaurant.id);
     
-    // Filter by distance - only show shops within 10km if location available
-    const withinRange = !latitude || !longitude || !restaurant.distance || restaurant.distance <= 10;
-    
-    return matchesSearch && matchesCategory && matchesFavourites && withinRange;
+    return matchesSearch && matchesCategory && matchesFavourites;
   });
 
   const handleSignOut = async () => {
@@ -143,9 +107,8 @@ export default function Index() {
             {/* Location + Brand */}
             <div className="flex items-center gap-2">
               <LocationHeader 
-                loading={locationLoading} 
-                error={locationError} 
-                onRefresh={refreshLocation}
+                address={deliveryAddress} 
+                onAddressChange={setDeliveryAddress}
               />
             </div>
 
@@ -162,8 +125,6 @@ export default function Index() {
                 />
               </div>
             </div>
-
-            {/* Actions */}
             <div className="flex items-center gap-2">
               {user ? (
                 <>
@@ -352,12 +313,10 @@ export default function Index() {
                       )}
 
                       {/* Delivery Time Chip */}
-                      {restaurant.deliveryTime && (
-                        <div className="absolute bottom-2 left-2 bg-card/95 backdrop-blur-sm rounded-full px-2 py-0.5 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-primary" />
-                          <span className="text-[10px] font-semibold">{restaurant.deliveryTime}</span>
-                        </div>
-                      )}
+                      <div className="absolute bottom-2 left-2 bg-card/95 backdrop-blur-sm rounded-full px-2 py-0.5 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-primary" />
+                        <span className="text-[10px] font-semibold">20-30 min</span>
+                      </div>
                     </div>
                     
                     <CardContent className="p-3">
@@ -378,11 +337,7 @@ export default function Index() {
                       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" />
-                          {restaurant.distance !== undefined ? (
-                            <span className="font-medium text-foreground">{formatDistance(restaurant.distance)}</span>
-                          ) : (
-                            <span className="truncate max-w-[80px]">{restaurant.address}</span>
-                          )}
+                          <span className="truncate max-w-[80px]">{restaurant.address}</span>
                         </div>
                         <span className="capitalize bg-secondary/80 px-1.5 py-0.5 rounded text-foreground">
                           {restaurant.category || 'food'}

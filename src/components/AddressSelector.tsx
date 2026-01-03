@@ -20,15 +20,13 @@ import {
   Briefcase, 
   MapPinned,
   Check,
-  Trash2,
-  Navigation,
-  Loader2
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AddressSelectorProps {
   selectedAddress: string;
-  onAddressChange: (address: string, lat?: number, lng?: number) => void;
+  onAddressChange: (address: string) => void;
 }
 
 const addressLabels = [
@@ -43,10 +41,7 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newAddress, setNewAddress] = useState('');
   const [newLabel, setNewLabel] = useState('Home');
-  const [newLat, setNewLat] = useState<number | null>(null);
-  const [newLng, setNewLng] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [detectingLocation, setDetectingLocation] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -66,76 +61,9 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
       // If no address selected and we have saved addresses, select default or first
       if (!selectedAddress && data.length > 0) {
         const defaultAddr = data.find(a => a.is_default) || data[0];
-        onAddressChange(defaultAddr.address, defaultAddr.lat || undefined, defaultAddr.lng || undefined);
+        onAddressChange(defaultAddr.address);
       }
     }
-  };
-
-  const detectCurrentLocation = async () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported');
-      return;
-    }
-
-    setDetectingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        setNewLat(latitude);
-        setNewLng(longitude);
-        setNewAddress(`Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
-        setDetectingLocation(false);
-        toast.success('Location detected!');
-      },
-      (error) => {
-        setDetectingLocation(false);
-        toast.error('Failed to get location: ' + error.message);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
-
-  const saveCurrentLocationAsAddress = async () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported');
-      return;
-    }
-
-    setLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        const addressText = `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
-        
-        const isFirst = addresses.length === 0;
-        const { data, error } = await supabase
-          .from('customer_addresses')
-          .insert({
-            user_id: user!.id,
-            label: 'Current',
-            address: addressText,
-            lat: latitude,
-            lng: longitude,
-            is_default: isFirst,
-          })
-          .select()
-          .single();
-
-        if (error) {
-          toast.error(error.message || 'Failed to save location');
-        } else {
-          setAddresses([...addresses, data as CustomerAddress]);
-          onAddressChange(addressText, latitude, longitude);
-          toast.success('Current location saved!');
-        }
-        setLoading(false);
-      },
-      (error) => {
-        setLoading(false);
-        toast.error('Failed to get location: ' + error.message);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
   };
 
   const addAddress = async () => {
@@ -153,8 +81,6 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
           user_id: user!.id,
           label: newLabel,
           address: newAddress,
-          lat: newLat,
-          lng: newLng,
           is_default: isFirst,
         })
         .select()
@@ -163,10 +89,8 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
       if (error) throw error;
 
       setAddresses([...addresses, data as CustomerAddress]);
-      onAddressChange(newAddress, newLat || undefined, newLng || undefined);
+      onAddressChange(newAddress);
       setNewAddress('');
-      setNewLat(null);
-      setNewLng(null);
       setShowAddDialog(false);
       toast.success('Address saved!');
     } catch (error: any) {
@@ -212,16 +136,10 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
   };
 
   const handleAddressSelect = (address: string) => {
-    const addr = addresses.find(a => a.address === address);
-    if (addr) {
-      onAddressChange(addr.address, addr.lat || undefined, addr.lng || undefined);
-    } else {
-      onAddressChange(address);
-    }
+    onAddressChange(address);
   };
 
   const getLabelIcon = (label: string) => {
-    if (label === 'Current') return <Navigation className="w-4 h-4" />;
     const found = addressLabels.find(l => l.value === label);
     return found?.icon || <MapPinned className="w-4 h-4" />;
   };
@@ -230,89 +148,53 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label>Delivery Address</Label>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="gap-1"
-            onClick={saveCurrentLocationAsAddress}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Navigation className="w-4 h-4" />
-            )}
-            Use Current
-          </Button>
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1">
-                <Plus className="w-4 h-4" />
-                Add New
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Address</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="flex gap-2 flex-wrap">
-                  {addressLabels.map((label) => (
-                    <Button
-                      key={label.value}
-                      variant={newLabel === label.value ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setNewLabel(label.value)}
-                      className="gap-2"
-                    >
-                      {label.icon}
-                      {label.value}
-                    </Button>
-                  ))}
-                </div>
-                
-                <Button 
-                  variant="outline" 
-                  className="w-full gap-2"
-                  onClick={detectCurrentLocation}
-                  disabled={detectingLocation}
-                >
-                  {detectingLocation ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Navigation className="w-4 h-4" />
-                  )}
-                  Detect Current Location
-                </Button>
-
-                <div className="space-y-2">
-                  <Label htmlFor="new-address">Full Address</Label>
-                  <Input
-                    id="new-address"
-                    placeholder="Enter your complete address..."
-                    value={newAddress}
-                    onChange={(e) => setNewAddress(e.target.value)}
-                  />
-                </div>
-
-                {newLat && newLng && (
-                  <div className="text-xs text-muted-foreground p-2 bg-secondary rounded-lg">
-                    <span className="font-medium">Coordinates:</span> {newLat.toFixed(6)}, {newLng.toFixed(6)}
-                  </div>
-                )}
-
-                <Button 
-                  onClick={addAddress} 
-                  disabled={loading || !newAddress.trim()}
-                  className="w-full"
-                >
-                  {loading ? 'Saving...' : 'Save Address'}
-                </Button>
+        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-1">
+              <Plus className="w-4 h-4" />
+              Add New
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Address</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="flex gap-2 flex-wrap">
+                {addressLabels.map((label) => (
+                  <Button
+                    key={label.value}
+                    variant={newLabel === label.value ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setNewLabel(label.value)}
+                    className="gap-2"
+                  >
+                    {label.icon}
+                    {label.value}
+                  </Button>
+                ))}
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="new-address">Full Address</Label>
+                <Input
+                  id="new-address"
+                  placeholder="Enter your complete address..."
+                  value={newAddress}
+                  onChange={(e) => setNewAddress(e.target.value)}
+                />
+              </div>
+
+              <Button 
+                onClick={addAddress} 
+                disabled={loading || !newAddress.trim()}
+                className="w-full"
+              >
+                {loading ? 'Saving...' : 'Save Address'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {addresses.length > 0 ? (
@@ -331,11 +213,6 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
                     {addr.is_default && (
                       <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                         Default
-                      </span>
-                    )}
-                    {addr.lat && addr.lng && (
-                      <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">
-                        GPS
                       </span>
                     )}
                   </div>
