@@ -236,7 +236,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
     setLoading(true);
 
     try {
-      // Create order
+      // Create order with delivery fee
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -249,6 +249,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
           payment_method: paymentMethod,
           is_scheduled: isScheduled,
           scheduled_at: scheduledAt?.toISOString() || null,
+          delivery_fee: finalDeliveryFee,
         })
         .select()
         .single();

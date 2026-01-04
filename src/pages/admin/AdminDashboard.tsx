@@ -85,6 +85,7 @@ export default function AdminDashboard() {
     activeOrders: 0,
     totalPartners: 0,
     totalUsers: 0,
+    deliveryFeeEarnings: 0,
   });
   const [loading, setLoading] = useState(true);
   const [commissionUpdates, setCommissionUpdates] = useState<Record<string, string>>({});
@@ -132,11 +133,18 @@ export default function AdminDashboard() {
         (sum, order) => sum + Number(order.total_amount),
         0
       );
+      // Calculate delivery fee earnings (from delivered orders only)
+      const deliveredOrders = ordersRes.data.filter(o => o.status === 'delivered');
+      const deliveryFeeEarnings = deliveredOrders.reduce(
+        (sum, order) => sum + Number((order as any).delivery_fee || 25),
+        0
+      );
       setStats((prev) => ({
         ...prev,
         totalOrders: ordersRes.data.length,
         totalRevenue,
         activeOrders,
+        deliveryFeeEarnings,
       }));
     }
 
@@ -311,7 +319,7 @@ export default function AdminDashboard() {
 
       <div className="container mx-auto px-4 py-6 space-y-6">
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
           <Card className="border-0 shadow-md bg-gradient-to-br from-primary/5 to-primary/10">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -382,11 +390,25 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
+          <Card className="border-0 shadow-md bg-gradient-to-br from-primary/10 to-accent/10">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                  <Bike className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Delivery Fee</p>
+                  <p className="text-2xl font-bold text-primary">₹{stats.deliveryFeeEarnings.toFixed(0)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-0 shadow-md bg-gradient-to-br from-status-preparing/5 to-status-preparing/10">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-status-preparing/20 flex items-center justify-center">
-                  <Bike className="w-5 h-5 text-status-preparing" />
+                  <Users className="w-5 h-5 text-status-preparing" />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground font-medium">Partners</p>

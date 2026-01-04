@@ -333,6 +333,13 @@ export default function DeliveryDashboard() {
   const verifyPickupAndAccept = async (order: OrderWithDetails) => {
     if (!deliveryPartner) return;
     
+    // Check if partner already has an active order
+    const { data: hasActive } = await supabase.rpc('partner_has_active_order');
+    if (hasActive) {
+      toast.error('Complete your current delivery first. One order at a time.');
+      return;
+    }
+    
     const otpValue = pickupOtpInputs[order.id] || '';
     
     // Use secure server-side RPC for OTP verification
@@ -398,19 +405,23 @@ export default function DeliveryDashboard() {
     }
   };
 
-  const cancelOrder = async (orderId: string) => {
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: 'cancelled' })
-      .eq('id', orderId);
+  const releaseOrderToPool = async (orderId: string) => {
+    // Use secure RPC to release order back to pool for another partner
+    const { data, error } = await supabase.rpc('release_order_to_pool', {
+      _order_id: orderId
+    });
 
     if (error) {
-      toast.error('Failed to cancel order');
-    } else {
-      toast.success('Order cancelled');
+      toast.error('Failed to release order');
+    } else if (data) {
+      toast.success('Order released for another partner');
       setDeliveryOtpInputs(prev => ({ ...prev, [orderId]: '' }));
       setDeliveryOtpErrors(prev => ({ ...prev, [orderId]: false }));
+      setPickupOtpInputs(prev => ({ ...prev, [orderId]: '' }));
+      setPickupOtpErrors(prev => ({ ...prev, [orderId]: false }));
       fetchData();
+    } else {
+      toast.error('Could not release order');
     }
   };
 
@@ -745,18 +756,18 @@ export default function DeliveryDashboard() {
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Cancel Delivery</AlertDialogTitle>
+                                  <AlertDialogTitle>Release Order</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Are you sure you want to cancel this delivery? This will mark the order as cancelled.
+                                    This order will be released back to the pool for another delivery partner to pick up.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel>No, Keep Delivery</AlertDialogCancel>
+                                  <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={() => cancelOrder(currentOrder.id)}
+                                    onClick={() => releaseOrderToPool(currentOrder.id)}
                                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                   >
-                                    Yes, Cancel
+                                    Yes, Release
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -778,18 +789,18 @@ export default function DeliveryDashboard() {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Cancel Delivery</AlertDialogTitle>
+                                <AlertDialogTitle>Release Order</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to cancel this delivery? This will mark the order as cancelled.
+                                  This order will be released back to the pool for another delivery partner to pick up.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>No, Keep Delivery</AlertDialogCancel>
+                                <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => cancelOrder(currentOrder.id)}
+                                  onClick={() => releaseOrderToPool(currentOrder.id)}
                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                 >
-                                  Yes, Cancel
+                                  Yes, Release
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
