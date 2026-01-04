@@ -463,6 +463,58 @@ export type Database = {
         }
         Relationships: []
       }
+      restaurant_reviews: {
+        Row: {
+          created_at: string
+          customer_id: string
+          id: string
+          order_id: string
+          rating: number
+          restaurant_id: string
+          review_text: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          id?: string
+          order_id: string
+          rating: number
+          restaurant_id: string
+          review_text?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          id?: string
+          order_id?: string
+          rating?: number
+          restaurant_id?: string
+          review_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restaurant_reviews_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "order_customer_info"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "restaurant_reviews_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "restaurant_reviews_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurants: {
         Row: {
           address: string
