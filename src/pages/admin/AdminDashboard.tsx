@@ -44,7 +44,12 @@ import {
   Users,
   UserPlus,
   Sparkles,
-  Tag
+  Tag,
+  RefreshCw,
+  Search,
+  Phone,
+  IndianRupee,
+  Filter
 } from 'lucide-react';
 import { PromotionsManager } from '@/components/admin/PromotionsManager';
 import { CouponsManager } from '@/components/admin/CouponsManager';
@@ -86,10 +91,16 @@ export default function AdminDashboard() {
     totalPartners: 0,
     totalUsers: 0,
     deliveryFeeEarnings: 0,
+    platformFeeEarnings: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [commissionUpdates, setCommissionUpdates] = useState<Record<string, string>>({});
   const [selectedRole, setSelectedRole] = useState<Record<string, AppRole>>({});
+  const [searchShops, setSearchShops] = useState('');
+  const [searchOrders, setSearchOrders] = useState('');
+  const [searchUsers, setSearchUsers] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
 
   useEffect(() => {
     if (!authLoading) {
@@ -133,18 +144,21 @@ export default function AdminDashboard() {
         (sum, order) => sum + Number(order.total_amount),
         0
       );
-      // Calculate delivery fee earnings (from delivered orders only)
+      // Calculate delivery fee and platform fee earnings (from delivered orders only)
       const deliveredOrders = ordersRes.data.filter(o => o.status === 'delivered');
       const deliveryFeeEarnings = deliveredOrders.reduce(
         (sum, order) => sum + Number((order as any).delivery_fee || 25),
         0
       );
+      const platformFee = 8; // Fixed platform fee per order
+      const platformFeeEarnings = deliveredOrders.length * platformFee;
       setStats((prev) => ({
         ...prev,
         totalOrders: ordersRes.data.length,
         totalRevenue,
         activeOrders,
         deliveryFeeEarnings,
+        platformFeeEarnings,
       }));
     }
 
@@ -177,7 +191,31 @@ export default function AdminDashboard() {
     }
 
     setLoading(false);
+    setRefreshing(false);
   };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
+
+  // Filtered data
+  const filteredRestaurants = restaurants.filter(r => 
+    r.name.toLowerCase().includes(searchShops.toLowerCase()) ||
+    (r.cuisine_type?.toLowerCase().includes(searchShops.toLowerCase()))
+  );
+
+  const filteredOrders = orders.filter(o => {
+    const matchesSearch = o.id.toLowerCase().includes(searchOrders.toLowerCase()) ||
+      (o.restaurants?.name?.toLowerCase().includes(searchOrders.toLowerCase()));
+    const matchesStatus = orderStatusFilter === 'all' || o.status === orderStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const filteredUsers = users.filter(u => 
+    (u.full_name?.toLowerCase().includes(searchUsers.toLowerCase())) ||
+    u.email.toLowerCase().includes(searchUsers.toLowerCase())
+  );
 
   const subscribeToChanges = () => {
     const channel = supabase
@@ -298,21 +336,32 @@ export default function AdminDashboard() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg">
-                <Shield className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text">
-                  Admin Dashboard
-                </h1>
-                <p className="text-xs text-muted-foreground">Manage your platform</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors">
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg">
+                  <Shield className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text">
+                    Admin Dashboard
+                  </h1>
+                  <p className="text-xs text-muted-foreground">Manage your platform</p>
+                </div>
               </div>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="h-9 w-9"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
           </div>
         </div>
       </header>
@@ -404,6 +453,20 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
+          <Card className="border-0 shadow-md bg-gradient-to-br from-accent/10 to-status-confirmed/10">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
+                  <IndianRupee className="w-5 h-5 text-accent" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Platform Fee</p>
+                  <p className="text-2xl font-bold text-accent">₹{stats.platformFeeEarnings.toFixed(0)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-0 shadow-md bg-gradient-to-br from-status-preparing/5 to-status-preparing/10">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -450,15 +513,26 @@ export default function AdminDashboard() {
           <TabsContent value="shops">
             <Card className="border-0 shadow-lg">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Store className="w-5 h-5 text-primary" />
-                  Shop Management
-                </CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Store className="w-5 h-5 text-primary" />
+                    Shop Management ({filteredRestaurants.length})
+                  </CardTitle>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search shops..."
+                      value={searchShops}
+                      onChange={(e) => setSearchShops(e.target.value)}
+                      className="pl-9 h-9 w-full sm:w-64"
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="h-[500px]">
                   <div className="p-4 space-y-3">
-                    {restaurants.map((restaurant) => (
+                    {filteredRestaurants.map((restaurant) => (
                       <div 
                         key={restaurant.id} 
                         className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
@@ -521,15 +595,45 @@ export default function AdminDashboard() {
           <TabsContent value="orders">
             <Card className="border-0 shadow-lg">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Package className="w-5 h-5 text-status-confirmed" />
-                  Recent Orders
-                </CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Package className="w-5 h-5 text-status-confirmed" />
+                    Orders ({filteredOrders.length})
+                  </CardTitle>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search orders..."
+                        value={searchOrders}
+                        onChange={(e) => setSearchOrders(e.target.value)}
+                        className="pl-9 h-9 w-full sm:w-48"
+                      />
+                    </div>
+                    <Select value={orderStatusFilter} onValueChange={setOrderStatusFilter}>
+                      <SelectTrigger className="h-9 w-full sm:w-36">
+                        <Filter className="w-3.5 h-3.5 mr-1" />
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="confirmed">Confirmed</SelectItem>
+                        <SelectItem value="preparing">Preparing</SelectItem>
+                        <SelectItem value="ready_for_pickup">Ready</SelectItem>
+                        <SelectItem value="picked_up">Picked Up</SelectItem>
+                        <SelectItem value="on_the_way">On The Way</SelectItem>
+                        <SelectItem value="delivered">Delivered</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="h-[500px]">
                   <div className="p-4 space-y-3">
-                    {orders.map((order) => (
+                    {filteredOrders.map((order) => (
                       <div 
                         key={order.id} 
                         className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
@@ -593,21 +697,21 @@ export default function AdminDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {deliveryPartners.map((partner) => (
                     <div 
                       key={partner.id}
-                      className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
+                      className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      <div className="flex items-start gap-3">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
                           partner.is_available ? 'bg-accent/20' : 'bg-muted'
                         }`}>
-                          <Bike className={`w-5 h-5 ${partner.is_available ? 'text-accent' : 'text-muted-foreground'}`} />
+                          <Bike className={`w-6 h-6 ${partner.is_available ? 'text-accent' : 'text-muted-foreground'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">Partner #{partner.id.slice(0, 6)}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold">Partner #{partner.id.slice(0, 6)}</p>
                             <span className={`text-xs px-2 py-0.5 rounded-full ${
                               partner.is_available 
                                 ? 'bg-accent/20 text-accent' 
@@ -616,6 +720,24 @@ export default function AdminDashboard() {
                               {partner.is_available ? 'Online' : 'Offline'}
                             </span>
                           </div>
+                          {partner.phone && (
+                            <a 
+                              href={`tel:${partner.phone}`} 
+                              className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                            >
+                              <Phone className="w-3 h-3" />
+                              {partner.phone}
+                            </a>
+                          )}
+                          {partner.vehicle_type && (
+                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                              <Bike className="w-3 h-3" />
+                              {partner.vehicle_type}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Joined: {format(new Date(partner.created_at), 'MMM d, yyyy')}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -634,15 +756,26 @@ export default function AdminDashboard() {
           <TabsContent value="users">
             <Card className="border-0 shadow-lg">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Users className="w-5 h-5 text-primary" />
-                  User Role Management ({users.length})
-                </CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Users className="w-5 h-5 text-primary" />
+                    User Role Management ({filteredUsers.length})
+                  </CardTitle>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search users..."
+                      value={searchUsers}
+                      onChange={(e) => setSearchUsers(e.target.value)}
+                      className="pl-9 h-9 w-full sm:w-64"
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="h-[500px]">
                   <div className="p-4 space-y-3">
-                    {users.map((u) => (
+                    {filteredUsers.map((u) => (
                       <div 
                         key={u.id} 
                         className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
