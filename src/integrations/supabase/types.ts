@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      coupons: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          discount_type: string | null
+          discount_value: number | null
+          id: string
+          is_active: boolean | null
+          max_discount_amount: number | null
+          min_order_amount: number | null
+          title: string
+          updated_at: string
+          usage_limit: number | null
+          used_count: number | null
+          valid_till: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
+          id?: string
+          is_active?: boolean | null
+          max_discount_amount?: number | null
+          min_order_amount?: number | null
+          title: string
+          updated_at?: string
+          usage_limit?: number | null
+          used_count?: number | null
+          valid_till?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
+          id?: string
+          is_active?: boolean | null
+          max_discount_amount?: number | null
+          min_order_amount?: number | null
+          title?: string
+          updated_at?: string
+          usage_limit?: number | null
+          used_count?: number | null
+          valid_till?: string | null
+        }
+        Relationships: []
+      }
       customer_addresses: {
         Row: {
           address: string
@@ -319,6 +370,48 @@ export type Database = {
           id?: string
           phone?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      promotions: {
+        Row: {
+          created_at: string
+          description: string | null
+          discount: string
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          sort_order: number | null
+          tag: string | null
+          title: string
+          updated_at: string
+          valid_till: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          discount: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          sort_order?: number | null
+          tag?: string | null
+          title: string
+          updated_at?: string
+          valid_till?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          discount?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          sort_order?: number | null
+          tag?: string | null
+          title?: string
+          updated_at?: string
+          valid_till?: string | null
         }
         Relationships: []
       }

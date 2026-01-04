@@ -42,8 +42,12 @@ import {
   TrendingUp,
   Clock,
   Users,
-  UserPlus
+  UserPlus,
+  Sparkles,
+  Tag
 } from 'lucide-react';
+import { PromotionsManager } from '@/components/admin/PromotionsManager';
+import { CouponsManager } from '@/components/admin/CouponsManager';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -394,22 +398,30 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="shops" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="shops" className="gap-2">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="shops" className="gap-1 text-xs">
               <Store className="w-4 h-4" />
-              Shops
+              <span className="hidden sm:inline">Shops</span>
             </TabsTrigger>
-            <TabsTrigger value="orders" className="gap-2">
+            <TabsTrigger value="orders" className="gap-1 text-xs">
               <Package className="w-4 h-4" />
-              Orders
+              <span className="hidden sm:inline">Orders</span>
             </TabsTrigger>
-            <TabsTrigger value="partners" className="gap-2">
+            <TabsTrigger value="partners" className="gap-1 text-xs">
               <Bike className="w-4 h-4" />
-              Partners
+              <span className="hidden sm:inline">Partners</span>
             </TabsTrigger>
-            <TabsTrigger value="users" className="gap-2">
+            <TabsTrigger value="users" className="gap-1 text-xs">
               <Users className="w-4 h-4" />
-              Users
+              <span className="hidden sm:inline">Users</span>
+            </TabsTrigger>
+            <TabsTrigger value="promotions" className="gap-1 text-xs">
+              <Sparkles className="w-4 h-4" />
+              <span className="hidden sm:inline">Promos</span>
+            </TabsTrigger>
+            <TabsTrigger value="coupons" className="gap-1 text-xs">
+              <Tag className="w-4 h-4" />
+              <span className="hidden sm:inline">Coupons</span>
             </TabsTrigger>
           </TabsList>
 
@@ -670,6 +682,14 @@ export default function AdminDashboard() {
                 </ScrollArea>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="promotions">
+            <PromotionsManager />
+          </TabsContent>
+
+          <TabsContent value="coupons">
+            <CouponsManager />
           </TabsContent>
         </Tabs>
       </div>

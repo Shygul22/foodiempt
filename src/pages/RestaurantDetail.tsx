@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Restaurant, MenuItem } from '@/types/database';
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function RestaurantDetail() {
+const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -99,7 +99,7 @@ export default function RestaurantDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div ref={ref} className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border">
         <div className="container mx-auto px-4 py-4">
@@ -266,4 +266,8 @@ export default function RestaurantDetail() {
       )}
     </div>
   );
-}
+});
+
+RestaurantDetail.displayName = 'RestaurantDetail';
+
+export default RestaurantDetail;
