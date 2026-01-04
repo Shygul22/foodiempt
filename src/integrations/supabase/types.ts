@@ -318,6 +318,7 @@ export type Database = {
           created_at: string
           customer_id: string
           delivery_address: string
+          delivery_fee: number | null
           delivery_lat: number | null
           delivery_lng: number | null
           delivery_otp: string | null
@@ -337,6 +338,7 @@ export type Database = {
           created_at?: string
           customer_id: string
           delivery_address: string
+          delivery_fee?: number | null
           delivery_lat?: number | null
           delivery_lng?: number | null
           delivery_otp?: string | null
@@ -356,6 +358,7 @@ export type Database = {
           created_at?: string
           customer_id?: string
           delivery_address?: string
+          delivery_fee?: number | null
           delivery_lat?: number | null
           delivery_lng?: number | null
           delivery_otp?: string | null
@@ -590,6 +593,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      partner_has_active_order: { Args: never; Returns: boolean }
+      release_order_to_pool: { Args: { _order_id: string }; Returns: boolean }
       request_delivery_partner_role: { Args: never; Returns: boolean }
       request_restaurant_owner_role: { Args: never; Returns: boolean }
       verify_delivery_and_complete: {
