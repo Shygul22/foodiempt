@@ -6,6 +6,7 @@ import { Order, OrderStatus, DeliveryPartner } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
+import { ReviewForm } from '@/components/ReviewForm';
 import { 
   ArrowLeft, 
   Package, 
@@ -57,6 +58,7 @@ export default function OrderTracking() {
   const navigate = useNavigate();
   const [order, setOrder] = useState<OrderWithDetails | null>(null);
   const [deliveryPartner, setDeliveryPartner] = useState<DeliveryPartnerWithProfile | null>(null);
+  const [hasReviewed, setHasReviewed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -86,6 +88,15 @@ export default function OrderTracking() {
     }
 
     setOrder(data);
+
+    // Check if user has already reviewed this order
+    const { data: reviewData } = await supabase
+      .from('restaurant_reviews')
+      .select('id')
+      .eq('order_id', orderId!)
+      .maybeSingle();
+
+    setHasReviewed(!!reviewData);
 
     // Fetch delivery partner if assigned
     if (data.delivery_partner_id) {
@@ -365,14 +376,36 @@ export default function OrderTracking() {
 
         {/* Delivered State */}
         {isDelivered && (
-          <Card className="border-0 shadow-sm border-accent/20 bg-accent/5">
-            <CardContent className="p-4 text-center">
-              <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-2">
-                <CheckCircle2 className="w-6 h-6 text-accent" />
-              </div>
-              <p className="text-accent font-medium">Order Delivered Successfully!</p>
-            </CardContent>
-          </Card>
+          <>
+            <Card className="border-0 shadow-sm border-accent/20 bg-accent/5">
+              <CardContent className="p-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-2">
+                  <CheckCircle2 className="w-6 h-6 text-accent" />
+                </div>
+                <p className="text-accent font-medium">Order Delivered Successfully!</p>
+              </CardContent>
+            </Card>
+
+            {/* Review Form - Show only if not reviewed */}
+            {!hasReviewed && order.restaurants && (
+              <ReviewForm
+                orderId={order.id}
+                restaurantId={order.restaurant_id}
+                customerId={user!.id}
+                restaurantName={order.restaurants.name}
+                onReviewSubmitted={() => setHasReviewed(true)}
+              />
+            )}
+
+            {/* Already Reviewed Message */}
+            {hasReviewed && (
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4 text-center">
+                  <p className="text-muted-foreground">Thank you for your review!</p>
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
       </div>
     </div>

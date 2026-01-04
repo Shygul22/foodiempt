@@ -6,6 +6,7 @@ import { useCartStore } from '@/stores/cartStore';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { RestaurantReviews } from '@/components/RestaurantReviews';
 import { 
   ArrowLeft, 
   MapPin, 
@@ -23,6 +24,7 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
   const { user } = useAuth();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [reviewStats, setReviewStats] = useState({ average: 0, count: 0 });
   const [loading, setLoading] = useState(true);
   const { items, addItem, updateQuantity, getTotalItems, getTotalAmount } = useCartStore();
 
@@ -33,9 +35,10 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
   }, [id]);
 
   const fetchRestaurantAndMenu = async () => {
-    const [restaurantRes, menuRes] = await Promise.all([
+    const [restaurantRes, menuRes, reviewsRes] = await Promise.all([
       supabase.from('restaurants').select('*').eq('id', id).maybeSingle(),
       supabase.from('menu_items').select('*').eq('restaurant_id', id).eq('is_available', true).order('category'),
+      supabase.from('restaurant_reviews').select('rating').eq('restaurant_id', id),
     ]);
 
     if (restaurantRes.data) {
@@ -43,6 +46,10 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
     }
     if (menuRes.data) {
       setMenuItems(menuRes.data);
+    }
+    if (reviewsRes.data && reviewsRes.data.length > 0) {
+      const avg = reviewsRes.data.reduce((sum, r) => sum + r.rating, 0) / reviewsRes.data.length;
+      setReviewStats({ average: avg, count: reviewsRes.data.length });
     }
     setLoading(false);
   };
@@ -152,8 +159,10 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
                 <Star className="w-4 h-4 fill-status-pending text-status-pending" />
-                <span className="font-medium text-foreground">4.5</span>
-                <span>(120+ ratings)</span>
+                <span className="font-medium text-foreground">
+                  {reviewStats.count > 0 ? reviewStats.average.toFixed(1) : '4.5'}
+                </span>
+                <span>({reviewStats.count > 0 ? `${reviewStats.count} reviews` : '120+ ratings'})</span>
               </div>
               <div className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
@@ -248,6 +257,11 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
             ))}
           </div>
         )}
+
+        {/* Customer Reviews Section */}
+        <div className="mt-10">
+          <RestaurantReviews restaurantId={id!} />
+        </div>
       </div>
 
       {/* Floating Cart Button */}
