@@ -243,11 +243,13 @@ export default function AdminDashboard() {
       return;
     }
 
-    const { error } = await supabase
-      .from('user_roles')
-      .insert({ user_id: userId, role });
+    // Use secure admin RPC function
+    const { data, error } = await supabase.rpc('admin_assign_role', {
+      _target_user_id: userId,
+      _role: role
+    });
 
-    if (error) {
+    if (error || !data) {
       toast.error('Failed to add role');
     } else {
       toast.success(`Role ${role} added successfully`);
@@ -257,13 +259,13 @@ export default function AdminDashboard() {
   };
 
   const removeRoleFromUser = async (userId: string, role: AppRole) => {
-    const { error } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId)
-      .eq('role', role);
+    // Use secure admin RPC function
+    const { data, error } = await supabase.rpc('admin_remove_role', {
+      _target_user_id: userId,
+      _role: role
+    });
 
-    if (error) {
+    if (error || !data) {
       toast.error('Failed to remove role');
     } else {
       toast.success(`Role ${role} removed`);

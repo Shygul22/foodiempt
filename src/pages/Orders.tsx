@@ -300,7 +300,7 @@ export default function Orders() {
                     {/* Reorder Button for completed/cancelled orders */}
                     {(isDelivered || isCancelled) && (
                       <div className="mt-4 pt-3 border-t border-border">
-                        <Link to={`/shop/${order.restaurant_id}`}>
+                        <Link to={`/restaurant/${order.restaurant_id}`}>
                           <Button variant="outline" className="w-full">
                             <RotateCcw className="w-4 h-4 mr-2" />
                             Order Again
