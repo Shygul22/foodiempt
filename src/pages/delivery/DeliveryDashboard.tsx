@@ -546,6 +546,33 @@ export default function DeliveryDashboard() {
           </TabsList>
 
           <TabsContent value="active" className="space-y-6">
+            {/* Quick Stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-3 text-center">
+                  <div className={`w-3 h-3 rounded-full mx-auto mb-1 ${deliveryPartner?.is_available ? 'bg-accent animate-pulse' : 'bg-muted-foreground'}`} />
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <p className={`font-semibold text-sm ${deliveryPartner?.is_available ? 'text-accent' : 'text-muted-foreground'}`}>
+                    {deliveryPartner?.is_available ? 'Online' : 'Offline'}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-3 text-center">
+                  <Package className="w-4 h-4 mx-auto mb-1 text-primary" />
+                  <p className="text-xs text-muted-foreground">Available</p>
+                  <p className="font-semibold text-sm">{availableOrders.length} orders</p>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-3 text-center">
+                  <CheckCircle className="w-4 h-4 mx-auto mb-1 text-status-delivered" />
+                  <p className="text-xs text-muted-foreground">Today</p>
+                  <p className="font-semibold text-sm">₹{earnings.today}</p>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Current Delivery */}
             {currentOrder && (
               <Card className="border-0 shadow-lg bg-gradient-to-r from-primary/5 to-accent/5">
