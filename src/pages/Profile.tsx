@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,7 +32,7 @@ interface Profile {
   phone: string | null;
 }
 
-export default function ProfilePage() {
+const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
   const { user, signOut, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -123,7 +123,7 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div ref={ref} className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
@@ -249,4 +249,8 @@ export default function ProfilePage() {
       </div>
     </div>
   );
-}
+});
+
+ProfilePage.displayName = 'ProfilePage';
+
+export default ProfilePage;
