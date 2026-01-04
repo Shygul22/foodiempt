@@ -44,7 +44,11 @@ import {
   MapPin,
   Navigation,
   Loader2,
-  Settings
+  Settings,
+  RefreshCw,
+  Search,
+  Bike,
+  Percent
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -66,11 +70,18 @@ export default function RestaurantDashboard() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderWithItems[]>([]);
-  const [earnings, setEarnings] = useState({ today: 0, week: 0, total: 0, orderCount: 0 });
+  const [earnings, setEarnings] = useState({ 
+    today: 0, week: 0, total: 0, orderCount: 0,
+    grossToday: 0, grossWeek: 0, grossTotal: 0,
+    deliveryFees: 0, platformFees: 0, commission: 0
+  });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showCreateRestaurant, setShowCreateRestaurant] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [searchOrders, setSearchOrders] = useState('');
+  const [searchMenu, setSearchMenu] = useState('');
 
   // Form states
   const [restaurantForm, setRestaurantForm] = useState({
@@ -169,26 +180,55 @@ export default function RestaurantDashboard() {
         }));
         setOrderHistory(historyWithProfiles as OrderWithItems[]);
 
-        // Calculate earnings
+        // Calculate earnings - EXCLUDE delivery fee and platform fee
         const deliveredOrders = historyData.filter(o => o.status === 'delivered');
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const weekAgo = new Date(today);
         weekAgo.setDate(weekAgo.getDate() - 7);
 
-        const todayEarnings = deliveredOrders
-          .filter(o => new Date(o.created_at) >= today)
-          .reduce((sum, o) => sum + Number(o.total_amount), 0);
-        const weekEarnings = deliveredOrders
-          .filter(o => new Date(o.created_at) >= weekAgo)
-          .reduce((sum, o) => sum + Number(o.total_amount), 0);
-        const totalEarnings = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+        const platformFee = 8; // Fixed platform fee per order
+        const deliveryFee = 25; // Default delivery fee per order
+        const commissionRate = restaurantData.commission_rate || 15;
+
+        // Calculate per-order shop earnings (total - delivery - platform - commission)
+        const calculateShopEarnings = (order: any) => {
+          const orderDeliveryFee = Number((order as any).delivery_fee || deliveryFee);
+          const subtotal = Number(order.total_amount) - orderDeliveryFee - platformFee;
+          const commission = (subtotal * commissionRate) / 100;
+          return Math.max(0, subtotal - commission);
+        };
+
+        const todayOrders = deliveredOrders.filter(o => new Date(o.created_at) >= today);
+        const weekOrders = deliveredOrders.filter(o => new Date(o.created_at) >= weekAgo);
+
+        const grossToday = todayOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+        const grossWeek = weekOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+        const grossTotal = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+
+        const todayShopEarnings = todayOrders.reduce((sum, o) => sum + calculateShopEarnings(o), 0);
+        const weekShopEarnings = weekOrders.reduce((sum, o) => sum + calculateShopEarnings(o), 0);
+        const totalShopEarnings = deliveredOrders.reduce((sum, o) => sum + calculateShopEarnings(o), 0);
+
+        const totalDeliveryFees = deliveredOrders.reduce((sum, o) => sum + Number((o as any).delivery_fee || deliveryFee), 0);
+        const totalPlatformFees = deliveredOrders.length * platformFee;
+        const totalCommission = deliveredOrders.reduce((sum, o) => {
+          const orderDeliveryFee = Number((o as any).delivery_fee || deliveryFee);
+          const subtotal = Number(o.total_amount) - orderDeliveryFee - platformFee;
+          return sum + (subtotal * commissionRate) / 100;
+        }, 0);
 
         setEarnings({
-          today: todayEarnings,
-          week: weekEarnings,
-          total: totalEarnings,
-          orderCount: deliveredOrders.length
+          today: todayShopEarnings,
+          week: weekShopEarnings,
+          total: totalShopEarnings,
+          orderCount: deliveredOrders.length,
+          grossToday,
+          grossWeek,
+          grossTotal,
+          deliveryFees: totalDeliveryFees,
+          platformFees: totalPlatformFees,
+          commission: totalCommission
         });
       }
     } else {
@@ -196,7 +236,24 @@ export default function RestaurantDashboard() {
     }
 
     setLoading(false);
+    setRefreshing(false);
   };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
+
+  // Filtered data
+  const filteredOrders = orders.filter(o => 
+    o.id.toLowerCase().includes(searchOrders.toLowerCase()) ||
+    (o.customer_profile?.full_name?.toLowerCase().includes(searchOrders.toLowerCase()))
+  );
+
+  const filteredMenuItems = menuItems.filter(item =>
+    item.name.toLowerCase().includes(searchMenu.toLowerCase()) ||
+    (item.category?.toLowerCase().includes(searchMenu.toLowerCase()))
+  );
 
   const subscribeToOrders = () => {
     const channel = supabase
@@ -577,7 +634,16 @@ export default function RestaurantDashboard() {
                 <h1 className="text-xl font-bold">{restaurant?.name}</h1>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="h-9 w-9"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </Button>
               {!restaurant?.is_verified && (
                 <span className="text-sm text-status-pending">Pending Verification</span>
               )}
@@ -628,17 +694,32 @@ export default function RestaurantDashboard() {
 
           {/* Orders Tab */}
           <TabsContent value="orders" className="space-y-4">
-            {orders.length === 0 ? (
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by order ID or customer..."
+                value={searchOrders}
+                onChange={(e) => setSearchOrders(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {filteredOrders.length === 0 ? (
               <Card className="border-0 shadow-sm">
                 <CardContent className="py-16 text-center">
                   <Package className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">No active orders</h3>
-                  <p className="text-muted-foreground">Orders will appear here when customers place them</p>
+                  <h3 className="text-xl font-semibold mb-2">
+                    {searchOrders ? 'No orders found' : 'No active orders'}
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {searchOrders ? 'Try a different search term' : 'Orders will appear here when customers place them'}
+                  </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="grid gap-4">
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <Card key={order.id} className="border-0 shadow-sm">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between mb-3">
@@ -860,15 +941,28 @@ export default function RestaurantDashboard() {
               </Dialog>
             </div>
 
-            {menuItems.length === 0 ? (
+            {/* Search Menu */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search menu items..."
+                value={searchMenu}
+                onChange={(e) => setSearchMenu(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {filteredMenuItems.length === 0 ? (
               <Card className="border-0 shadow-sm">
                 <CardContent className="py-16 text-center">
-                  <p className="text-muted-foreground">No menu items yet. Add your first item!</p>
+                  <p className="text-muted-foreground">
+                    {searchMenu ? 'No items found' : 'No menu items yet. Add your first item!'}
+                  </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="grid gap-4">
-                {menuItems.map((item) => (
+                {filteredMenuItems.map((item) => (
                   <Card key={item.id} className="border-0 shadow-sm">
                     <CardContent className="p-4">
                       <div className="flex items-center gap-4">
@@ -1015,72 +1109,118 @@ export default function RestaurantDashboard() {
 
           {/* Earnings Tab */}
           <TabsContent value="earnings" className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <Card className="border-0 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-                      <IndianRupee className="w-5 h-5 text-accent" />
+            {/* Net Earnings Cards */}
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">Your Net Earnings</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <Card className="border-0 shadow-sm bg-gradient-to-br from-accent/5 to-accent/10">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
+                        <IndianRupee className="w-5 h-5 text-accent" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Today</p>
+                        <p className="text-2xl font-bold text-accent">₹{earnings.today.toFixed(0)}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Today</p>
-                      <p className="text-2xl font-bold">₹{earnings.today.toFixed(0)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-sm bg-gradient-to-br from-primary/5 to-primary/10">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">This Week</p>
+                        <p className="text-2xl font-bold text-primary">₹{earnings.week.toFixed(0)}</p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-0 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <TrendingUp className="w-5 h-5 text-primary" />
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-sm bg-gradient-to-br from-status-delivered/5 to-status-delivered/10">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-status-delivered/20 flex items-center justify-center">
+                        <Wallet className="w-5 h-5 text-status-delivered" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total Net Earnings</p>
+                        <p className="text-2xl font-bold text-status-delivered">₹{earnings.total.toFixed(0)}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">This Week</p>
-                      <p className="text-2xl font-bold">₹{earnings.week.toFixed(0)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
+                        <Package className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Orders Delivered</p>
+                        <p className="text-2xl font-bold">{earnings.orderCount}</p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-0 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-status-delivered/10 flex items-center justify-center">
-                      <Wallet className="w-5 h-5 text-status-delivered" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Earnings</p>
-                      <p className="text-2xl font-bold">₹{earnings.total.toFixed(0)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-0 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-                      <Package className="w-5 h-5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Orders Delivered</p>
-                      <p className="text-2xl font-bold">{earnings.orderCount}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
+            {/* Settlement Breakdown */}
             <Card className="border-0 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">Commission Details</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <IndianRupee className="w-4 h-4" />
+                  Settlement Breakdown
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Gross Order Value</span>
+                  <span className="font-bold">₹{earnings.grossTotal.toFixed(0)}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-destructive/5 rounded-lg border border-destructive/10">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Bike className="w-4 h-4" />
+                    Delivery Fees (Platform)
+                  </span>
+                  <span className="font-medium text-destructive">- ₹{earnings.deliveryFees.toFixed(0)}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-destructive/5 rounded-lg border border-destructive/10">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <IndianRupee className="w-4 h-4" />
+                    Platform Fees (₹8/order)
+                  </span>
+                  <span className="font-medium text-destructive">- ₹{earnings.platformFees.toFixed(0)}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-destructive/5 rounded-lg border border-destructive/10">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Percent className="w-4 h-4" />
+                    Commission ({restaurant?.commission_rate || 15}%)
+                  </span>
+                  <span className="font-medium text-destructive">- ₹{earnings.commission.toFixed(0)}</span>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-accent/10 rounded-lg border border-accent/20">
+                  <span className="text-sm font-semibold text-accent">Your Net Earnings</span>
+                  <span className="font-bold text-lg text-accent">₹{earnings.total.toFixed(0)}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Commission Info */}
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">Payment Schedule</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Platform Commission Rate</span>
-                  <span className="font-bold">{restaurant?.commission_rate || 15}%</span>
+                  <span className="text-sm text-muted-foreground">Settlement Frequency</span>
+                  <span className="font-medium">Weekly</span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Commission is deducted from each order. Settlements are processed weekly.
+                <p className="text-xs text-muted-foreground mt-3">
+                  Earnings are settled every Monday. Delivery fees and platform fees are collected by the platform. Commission is deducted from your order subtotal.
                 </p>
               </CardContent>
             </Card>
