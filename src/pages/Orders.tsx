@@ -6,6 +6,7 @@ import { Order, OrderStatus } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -17,12 +18,25 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Package, Clock, Banknote, Smartphone, Key, XCircle, RotateCcw, MapPin, Phone } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ArrowLeft, Package, Clock, Banknote, Smartphone, Key, XCircle, RotateCcw, MapPin, Phone, Star } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 interface OrderWithRestaurant extends Order {
   restaurants: { name: string; phone: string | null } | null;
+}
+
+interface OrderRating {
+  order_id: string;
+  rating: number;
 }
 
 // Helper to generate short order ID
@@ -52,6 +66,13 @@ export default function Orders() {
   const [orders, setOrders] = useState<OrderWithRestaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<OrderRating[]>([]);
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [ratingOrderId, setRatingOrderId] = useState<string | null>(null);
+  const [ratingDeliveryPartnerId, setRatingDeliveryPartnerId] = useState<string | null>(null);
+  const [selectedRating, setSelectedRating] = useState(0);
+  const [feedback, setFeedback] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -60,6 +81,7 @@ export default function Orders() {
     }
     if (user) {
       fetchOrders();
+      fetchRatings();
       const cleanup = subscribeToOrders();
       return cleanup;
     }
@@ -76,6 +98,57 @@ export default function Orders() {
       setOrders(data);
     }
     setLoading(false);
+  };
+
+  const fetchRatings = async () => {
+    const { data } = await supabase
+      .from('order_ratings')
+      .select('order_id, rating')
+      .eq('customer_id', user!.id);
+
+    if (data) {
+      setRatings(data);
+    }
+  };
+
+  const hasRated = (orderId: string) => {
+    return ratings.some(r => r.order_id === orderId);
+  };
+
+  const getOrderRating = (orderId: string) => {
+    return ratings.find(r => r.order_id === orderId)?.rating || 0;
+  };
+
+  const openRatingDialog = (orderId: string, deliveryPartnerId: string | null) => {
+    setRatingOrderId(orderId);
+    setRatingDeliveryPartnerId(deliveryPartnerId);
+    setSelectedRating(0);
+    setFeedback('');
+    setRatingDialogOpen(true);
+  };
+
+  const submitRating = async () => {
+    if (!ratingOrderId || selectedRating === 0) return;
+
+    setSubmittingRating(true);
+    const { error } = await supabase
+      .from('order_ratings')
+      .insert({
+        order_id: ratingOrderId,
+        customer_id: user!.id,
+        delivery_partner_id: ratingDeliveryPartnerId,
+        rating: selectedRating,
+        feedback: feedback.trim() || null,
+      });
+
+    if (error) {
+      toast.error('Failed to submit rating');
+    } else {
+      toast.success('Thank you for your feedback!');
+      fetchRatings();
+      setRatingDialogOpen(false);
+    }
+    setSubmittingRating(false);
   };
 
   const subscribeToOrders = () => {
@@ -297,9 +370,41 @@ export default function Orders() {
                       </div>
                     )}
 
+                    {/* Rating Section for delivered orders */}
+                    {isDelivered && (
+                      <div className="mt-4 pt-3 border-t border-border">
+                        {hasRated(order.id) ? (
+                          <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-lg">
+                            <span className="text-sm text-muted-foreground">Your rating:</span>
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-4 h-4 ${
+                                    star <= getOrderRating(order.id)
+                                      ? 'fill-yellow-400 text-yellow-400'
+                                      : 'text-muted-foreground'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className="w-full border-primary/30 text-primary hover:bg-primary/10"
+                            onClick={() => openRatingDialog(order.id, order.delivery_partner_id)}
+                          >
+                            <Star className="w-4 h-4 mr-2" />
+                            Rate Your Experience
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
                     {/* Reorder Button for completed/cancelled orders */}
                     {(isDelivered || isCancelled) && (
-                      <div className="mt-4 pt-3 border-t border-border">
+                      <div className="mt-3">
                         <Link to={`/restaurant/${order.restaurant_id}`}>
                           <Button variant="outline" className="w-full">
                             <RotateCcw className="w-4 h-4 mr-2" />
@@ -315,6 +420,68 @@ export default function Orders() {
           </div>
         )}
       </div>
+
+      {/* Rating Dialog */}
+      <Dialog open={ratingDialogOpen} onOpenChange={setRatingDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rate Your Delivery</DialogTitle>
+            <DialogDescription>
+              How was your delivery experience? Your feedback helps us improve.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {/* Star Rating */}
+            <div className="flex justify-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setSelectedRating(star)}
+                  className="p-1 transition-transform hover:scale-110"
+                >
+                  <Star
+                    className={`w-10 h-10 ${
+                      star <= selectedRating
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : 'text-muted-foreground hover:text-yellow-300'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            <p className="text-center text-sm text-muted-foreground">
+              {selectedRating === 0 && 'Tap to rate'}
+              {selectedRating === 1 && 'Poor'}
+              {selectedRating === 2 && 'Fair'}
+              {selectedRating === 3 && 'Good'}
+              {selectedRating === 4 && 'Very Good'}
+              {selectedRating === 5 && 'Excellent!'}
+            </p>
+            {/* Feedback */}
+            <Textarea
+              placeholder="Share your feedback (optional)"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRatingDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitRating}
+              disabled={selectedRating === 0 || submittingRating}
+            >
+              {submittingRating ? 'Submitting...' : 'Submit Rating'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
