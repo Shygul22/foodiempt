@@ -19,19 +19,20 @@ import {
   Star, 
   ShoppingCart, 
   Utensils,
-  LogOut,
   Shield,
   Store,
   Bike,
   ChevronRight,
   Heart,
   Zap,
-  TrendingUp
+  TrendingUp,
+  User,
+  Gift
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Index() {
-  const { user, signOut, hasRole, loading: authLoading } = useAuth();
+  const { user, hasRole, loading: authLoading } = useAuth();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [favouriteIds, setFavouriteIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,10 +94,6 @@ export default function Index() {
     return matchesSearch && matchesCategory && matchesFavourites;
   });
 
-  const handleSignOut = async () => {
-    await signOut();
-    toast.success('Signed out successfully');
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -165,9 +162,11 @@ export default function Index() {
                     </Button>
                   </Link>
                   
-                  <Button variant="ghost" size="icon" onClick={handleSignOut} className="h-9 w-9">
-                    <LogOut className="w-4 h-4" />
-                  </Button>
+                  <Link to="/profile">
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                      <User className="w-4 h-4" />
+                    </Button>
+                  </Link>
                 </>
               ) : (
                 <Link to="/auth">
@@ -212,6 +211,22 @@ export default function Index() {
           </div>
         </div>
       </div>
+
+      {/* Promotions Banner */}
+      <section className="py-3 bg-gradient-to-r from-primary/10 to-accent/10">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between">
+            <Link to="/promotions" className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors">
+              <Gift className="w-4 h-4 text-primary" />
+              <span>Special Offers & Promotions</span>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+            <Link to="/offers" className="text-xs text-primary hover:underline">
+              View All Coupons
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* Categories */}
       <section className="py-3 bg-card/50 border-b border-border sticky top-[52px] md:top-[60px] z-40">

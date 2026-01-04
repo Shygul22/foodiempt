@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Restaurant, Order, OrderStatus, DeliveryPartner } from '@/types/database';
+import { Restaurant, Order, OrderStatus, DeliveryPartner, AppRole } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +21,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   Shield, 
   Store, 
@@ -33,7 +41,8 @@ import {
   MapPin,
   TrendingUp,
   Clock,
-  Users
+  Users,
+  UserPlus
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -50,12 +59,20 @@ interface DeliveryPartnerWithProfile extends DeliveryPartner {
   user_id: string;
 }
 
+interface UserWithRoles {
+  id: string;
+  email: string;
+  full_name: string | null;
+  roles: AppRole[];
+}
+
 export default function AdminDashboard() {
   const { user, hasRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [restaurants, setRestaurants] = useState<RestaurantWithStats[]>([]);
   const [orders, setOrders] = useState<OrderWithDetails[]>([]);
   const [deliveryPartners, setDeliveryPartners] = useState<DeliveryPartnerWithProfile[]>([]);
+  const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [stats, setStats] = useState({
     totalRestaurants: 0,
     verifiedRestaurants: 0,
@@ -63,9 +80,11 @@ export default function AdminDashboard() {
     totalRevenue: 0,
     activeOrders: 0,
     totalPartners: 0,
+    totalUsers: 0,
   });
   const [loading, setLoading] = useState(true);
   const [commissionUpdates, setCommissionUpdates] = useState<Record<string, string>>({});
+  const [selectedRole, setSelectedRole] = useState<Record<string, AppRole>>({});
 
   useEffect(() => {
     if (!authLoading) {
@@ -80,7 +99,7 @@ export default function AdminDashboard() {
   }, [user, authLoading, hasRole]);
 
   const fetchData = async () => {
-    const [restaurantsRes, ordersRes, partnersRes] = await Promise.all([
+    const [restaurantsRes, ordersRes, partnersRes, profilesRes] = await Promise.all([
       supabase.from('restaurants').select('*').order('created_at', { ascending: false }),
       supabase
         .from('orders')
@@ -88,6 +107,7 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: false })
         .limit(100),
       supabase.from('delivery_partners').select('*'),
+      supabase.from('profiles').select('id, email, full_name').order('created_at', { ascending: false }).limit(100),
     ]);
 
     if (restaurantsRes.data) {
@@ -121,6 +141,26 @@ export default function AdminDashboard() {
       setStats((prev) => ({
         ...prev,
         totalPartners: partnersRes.data.length,
+      }));
+    }
+
+    // Fetch users with their roles
+    if (profilesRes.data) {
+      const userIds = profilesRes.data.map(p => p.id);
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('user_id, role')
+        .in('user_id', userIds);
+
+      const usersWithRoles: UserWithRoles[] = profilesRes.data.map(profile => ({
+        ...profile,
+        roles: rolesData?.filter(r => r.user_id === profile.id).map(r => r.role as AppRole) || []
+      }));
+      
+      setUsers(usersWithRoles);
+      setStats((prev) => ({
+        ...prev,
+        totalUsers: profilesRes.data.length,
       }));
     }
 
@@ -185,6 +225,48 @@ export default function AdminDashboard() {
       toast.error('Failed to cancel order');
     } else {
       toast.success('Order cancelled');
+      fetchData();
+    }
+  };
+
+  const addRoleToUser = async (userId: string) => {
+    const role = selectedRole[userId];
+    if (!role) {
+      toast.error('Please select a role');
+      return;
+    }
+
+    // Check if user already has this role
+    const userRoles = users.find(u => u.id === userId)?.roles || [];
+    if (userRoles.includes(role)) {
+      toast.error('User already has this role');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('user_roles')
+      .insert({ user_id: userId, role });
+
+    if (error) {
+      toast.error('Failed to add role');
+    } else {
+      toast.success(`Role ${role} added successfully`);
+      setSelectedRole(prev => ({ ...prev, [userId]: '' as AppRole }));
+      fetchData();
+    }
+  };
+
+  const removeRoleFromUser = async (userId: string, role: AppRole) => {
+    const { error } = await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', userId)
+      .eq('role', role);
+
+    if (error) {
+      toast.error('Failed to remove role');
+    } else {
+      toast.success(`Role ${role} removed`);
       fetchData();
     }
   };
@@ -309,206 +391,285 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        {/* Main Grid - All controls on same page */}
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Shops Management */}
-          <Card className="border-0 shadow-lg">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Store className="w-5 h-5 text-primary" />
-                Shop Management
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[400px]">
-                <div className="p-4 space-y-3">
-                  {restaurants.map((restaurant) => (
+        <Tabs defaultValue="shops" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="shops" className="gap-2">
+              <Store className="w-4 h-4" />
+              Shops
+            </TabsTrigger>
+            <TabsTrigger value="orders" className="gap-2">
+              <Package className="w-4 h-4" />
+              Orders
+            </TabsTrigger>
+            <TabsTrigger value="partners" className="gap-2">
+              <Bike className="w-4 h-4" />
+              Partners
+            </TabsTrigger>
+            <TabsTrigger value="users" className="gap-2">
+              <Users className="w-4 h-4" />
+              Users
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="shops">
+            <Card className="border-0 shadow-lg">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Store className="w-5 h-5 text-primary" />
+                  Shop Management
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[500px]">
+                  <div className="p-4 space-y-3">
+                    {restaurants.map((restaurant) => (
+                      <div 
+                        key={restaurant.id} 
+                        className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold truncate">{restaurant.name}</h4>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                restaurant.is_open 
+                                  ? 'bg-accent/20 text-accent' 
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {restaurant.is_open ? 'Open' : 'Closed'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">{restaurant.cuisine_type}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={restaurant.is_verified}
+                              onCheckedChange={(checked) => toggleVerification(restaurant.id, checked)}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                          <Input
+                            type="number"
+                            placeholder={`${restaurant.commission_rate}%`}
+                            value={commissionUpdates[restaurant.id] || ''}
+                            onChange={(e) => setCommissionUpdates((prev) => ({
+                              ...prev,
+                              [restaurant.id]: e.target.value,
+                            }))}
+                            className="w-20 h-8 text-sm"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateCommission(restaurant.id)}
+                            disabled={!commissionUpdates[restaurant.id]}
+                            className="h-8"
+                          >
+                            <Percent className="w-3 h-3 mr-1" />
+                            Set
+                          </Button>
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            Current: {restaurant.commission_rate}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="orders">
+            <Card className="border-0 shadow-lg">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Package className="w-5 h-5 text-status-confirmed" />
+                  Recent Orders
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[500px]">
+                  <div className="p-4 space-y-3">
+                    {orders.map((order) => (
+                      <div 
+                        key={order.id} 
+                        className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-sm font-medium">#{order.id.slice(0, 8)}</span>
+                              <StatusBadge status={order.status as OrderStatus} />
+                            </div>
+                            <p className="text-sm mt-1">{order.restaurants?.name || 'Unknown'}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(order.created_at), 'MMM d, h:mm a')}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-primary">₹{Number(order.total_amount).toFixed(0)}</p>
+                            {!['delivered', 'cancelled'].includes(order.status) && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive mt-1">
+                                    <X className="w-3 h-3 mr-1" />
+                                    Cancel
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Cancel Order</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to cancel this order? This cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Keep</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => cancelOrder(order.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Cancel Order
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="partners">
+            <Card className="border-0 shadow-lg">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Bike className="w-5 h-5 text-status-preparing" />
+                  Delivery Partners ({deliveryPartners.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {deliveryPartners.map((partner) => (
                     <div 
-                      key={restaurant.id} 
+                      key={partner.id}
                       className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          partner.is_available ? 'bg-accent/20' : 'bg-muted'
+                        }`}>
+                          <Bike className={`w-5 h-5 ${partner.is_available ? 'text-accent' : 'text-muted-foreground'}`} />
+                        </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-semibold truncate">{restaurant.name}</h4>
+                          <p className="text-sm font-medium truncate">Partner #{partner.id.slice(0, 6)}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
                             <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              restaurant.is_open 
+                              partner.is_available 
                                 ? 'bg-accent/20 text-accent' 
                                 : 'bg-muted text-muted-foreground'
                             }`}>
-                              {restaurant.is_open ? 'Open' : 'Closed'}
+                              {partner.is_available ? 'Online' : 'Offline'}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{restaurant.cuisine_type} • {restaurant.category}</p>
-                          {restaurant.lat && restaurant.lng && (
-                            <div className="flex items-center gap-1 text-xs text-accent mt-1">
-                              <MapPin className="w-3 h-3" />
-                              <span>Location set</span>
-                            </div>
-                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={restaurant.is_verified}
-                            onCheckedChange={(checked) => toggleVerification(restaurant.id, checked)}
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
-                        <Input
-                          type="number"
-                          placeholder={`${restaurant.commission_rate}%`}
-                          value={commissionUpdates[restaurant.id] || ''}
-                          onChange={(e) => setCommissionUpdates((prev) => ({
-                            ...prev,
-                            [restaurant.id]: e.target.value,
-                          }))}
-                          className="w-20 h-8 text-sm"
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => updateCommission(restaurant.id)}
-                          disabled={!commissionUpdates[restaurant.id]}
-                          className="h-8"
-                        >
-                          <Percent className="w-3 h-3 mr-1" />
-                          Set
-                        </Button>
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          Current: {restaurant.commission_rate}%
-                        </span>
                       </div>
                     </div>
                   ))}
+                  {deliveryPartners.length === 0 && (
+                    <div className="col-span-full text-center py-8 text-muted-foreground">
+                      <Bike className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p>No delivery partners registered yet</p>
+                    </div>
+                  )}
                 </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          {/* Active Orders */}
-          <Card className="border-0 shadow-lg">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Package className="w-5 h-5 text-status-confirmed" />
-                Recent Orders
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[400px]">
-                <div className="p-4 space-y-3">
-                  {orders.map((order) => (
-                    <div 
-                      key={order.id} 
-                      className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm font-medium">#{order.id.slice(0, 8)}</span>
-                            <StatusBadge status={order.status as OrderStatus} />
-                          </div>
-                          <p className="text-sm mt-1">{order.restaurants?.name || 'Unknown'}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(order.created_at), 'MMM d, h:mm a')}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-primary">₹{Number(order.total_amount).toFixed(0)}</p>
-                          {!['delivered', 'cancelled'].includes(order.status) && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive mt-1">
-                                  <X className="w-3 h-3 mr-1" />
-                                  Cancel
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Cancel Order</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to cancel this order? This cannot be undone.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Keep</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => cancelOrder(order.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          <TabsContent value="users">
+            <Card className="border-0 shadow-lg">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Users className="w-5 h-5 text-primary" />
+                  User Role Management ({users.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[500px]">
+                  <div className="p-4 space-y-3">
+                    {users.map((u) => (
+                      <div 
+                        key={u.id} 
+                        className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold">{u.full_name || 'No Name'}</h4>
+                            <p className="text-sm text-muted-foreground">{u.email}</p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {u.roles.map((role) => (
+                                <span 
+                                  key={role}
+                                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-primary/10 text-primary"
+                                >
+                                  {role}
+                                  <button
+                                    onClick={() => removeRoleFromUser(u.id, role)}
+                                    className="hover:text-destructive"
                                   >
-                                    Cancel Order
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          )}
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                              {u.roles.length === 0 && (
+                                <span className="text-xs text-muted-foreground">No roles assigned</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                          <Select
+                            value={selectedRole[u.id] || ''}
+                            onValueChange={(value) => setSelectedRole(prev => ({ ...prev, [u.id]: value as AppRole }))}
+                          >
+                            <SelectTrigger className="w-40 h-8">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="super_admin">Super Admin</SelectItem>
+                              <SelectItem value="restaurant_owner">Restaurant Owner</SelectItem>
+                              <SelectItem value="delivery_partner">Delivery Partner</SelectItem>
+                              <SelectItem value="customer">Customer</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            onClick={() => addRoleToUser(u.id)}
+                            disabled={!selectedRole[u.id]}
+                            className="h-8"
+                          >
+                            <UserPlus className="w-3 h-3 mr-1" />
+                            Add Role
+                          </Button>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-
-          {/* Delivery Partners */}
-          <Card className="border-0 shadow-lg lg:col-span-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Bike className="w-5 h-5 text-status-preparing" />
-                Delivery Partners ({deliveryPartners.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {deliveryPartners.map((partner) => (
-                  <div 
-                    key={partner.id}
-                    className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        partner.is_available ? 'bg-accent/20' : 'bg-muted'
-                      }`}>
-                        <Bike className={`w-5 h-5 ${partner.is_available ? 'text-accent' : 'text-muted-foreground'}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">Partner #{partner.id.slice(0, 6)}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            partner.is_available 
-                              ? 'bg-accent/20 text-accent' 
-                              : 'bg-muted text-muted-foreground'
-                          }`}>
-                            {partner.is_available ? 'Online' : 'Offline'}
-                          </span>
-                          {partner.vehicle_type && (
-                            <span className="text-xs text-muted-foreground capitalize">
-                              {partner.vehicle_type}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {partner.current_lat && partner.current_lng && (
-                      <div className="flex items-center gap-1 text-xs text-accent mt-2">
-                        <MapPin className="w-3 h-3" />
-                        <span>{partner.current_lat.toFixed(3)}, {partner.current_lng.toFixed(3)}</span>
-                      </div>
-                    )}
+                    ))}
                   </div>
-                ))}
-                {deliveryPartners.length === 0 && (
-                  <div className="col-span-full text-center py-8 text-muted-foreground">
-                    <Bike className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                    <p>No delivery partners registered yet</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
