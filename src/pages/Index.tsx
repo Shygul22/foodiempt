@@ -9,7 +9,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCartStore } from '@/stores/cartStore';
-import { CategoryTabs, CategoryType } from '@/components/CategoryTabs';
 import { FavouriteButton } from '@/components/FavouriteButton';
 import { LocationHeader } from '@/components/LocationHeader';
 import { AIRecommendations } from '@/components/AIRecommendations';
@@ -38,7 +37,6 @@ export default function Index() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [favouriteIds, setFavouriteIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
   const [activeTab, setActiveTab] = useState<'all' | 'favourites'>('all');
   const [loading, setLoading] = useState(true);
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -85,15 +83,11 @@ export default function Index() {
       restaurant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       restaurant.cuisine_type?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesCategory = 
-      selectedCategory === 'all' || 
-      (restaurant.category || 'food') === selectedCategory;
-    
     const matchesFavourites = 
       activeTab === 'all' || 
       favouriteIds.includes(restaurant.id);
     
-    return matchesSearch && matchesCategory && matchesFavourites;
+    return matchesSearch && matchesFavourites;
   });
 
 
@@ -233,21 +227,12 @@ export default function Index() {
       {/* AI Recommendations */}
       <AIRecommendations />
 
-      {/* Categories */}
-      <section className="py-3 bg-card/50 border-b border-border sticky top-[52px] md:top-[60px] z-40">
-        <div className="container mx-auto">
-          <CategoryTabs selected={selectedCategory} onSelect={setSelectedCategory} />
-        </div>
-      </section>
-
       {/* Restaurants Grid */}
       <section className="py-4">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-bold text-foreground">
-                {selectedCategory === 'all' ? 'Nearby Shops' : `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}`}
-              </h2>
+              <h2 className="text-lg font-bold text-foreground">Nearby Shops</h2>
               {user && (
                 <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'all' | 'favourites')}>
                   <TabsList className="h-8">
