@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -6,9 +6,9 @@ import { useCartStore } from '@/stores/cartStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Badge } from '@/components/ui/badge';
 import { AddressSelector } from '@/components/AddressSelector';
 import { ScheduleDelivery } from '@/components/ScheduleDelivery';
 import { 
@@ -19,17 +19,36 @@ import {
   ShoppingBag,
   Banknote,
   Smartphone,
-  MapPin,
   Bike,
   Clock,
   Zap,
-  Store
+  Store,
+  Tag,
+  X,
+  Check,
+  Phone
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type PaymentMethod = 'cod' | 'gpay';
 
-export default function Cart() {
+interface AppliedCoupon {
+  code: string;
+  discount_type: string;
+  discount_value: number;
+  max_discount_amount: number | null;
+  discountAmount: number;
+}
+
+const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { items, restaurantId, updateQuantity, removeItem, clearCart, getTotalAmount } = useCartStore();
@@ -40,12 +59,25 @@ export default function Cart() {
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [restaurant, setRestaurant] = useState<{ name: string; address: string } | null>(null);
+  
+  // Coupon states
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  
+  // Phone verification
+  const [phoneDialogOpen, setPhoneDialogOpen] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [userPhone, setUserPhone] = useState<string | null>(null);
 
   useEffect(() => {
     if (restaurantId) {
       fetchRestaurant();
     }
-  }, [restaurantId]);
+    if (user) {
+      fetchUserPhone();
+    }
+  }, [restaurantId, user]);
 
   const fetchRestaurant = async () => {
     const { data } = await supabase
@@ -56,6 +88,19 @@ export default function Cart() {
     
     if (data) {
       setRestaurant(data);
+    }
+  };
+
+  const fetchUserPhone = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('phone')
+      .eq('id', user!.id)
+      .maybeSingle();
+
+    if (data?.phone) {
+      setUserPhone(data.phone);
+      setPhoneNumber(data.phone);
     }
   };
 
@@ -76,6 +121,100 @@ export default function Cart() {
   const isFreeDelivery = subtotal >= freeDeliveryThreshold;
   const finalDeliveryFee = isFreeDelivery ? 0 : deliveryFee;
   const amountForFreeDelivery = freeDeliveryThreshold - subtotal;
+
+  // Coupon discount
+  const couponDiscount = appliedCoupon?.discountAmount || 0;
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) {
+      toast.error('Please enter a coupon code');
+      return;
+    }
+
+    if (!user) {
+      toast.error('Please sign in to apply coupons');
+      navigate('/auth');
+      return;
+    }
+
+    if (!userPhone) {
+      setPhoneDialogOpen(true);
+      return;
+    }
+
+    setApplyingCoupon(true);
+    
+    const { data: coupon, error } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('code', couponCode.toUpperCase().trim())
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error || !coupon) {
+      toast.error('Invalid or expired coupon code');
+      setApplyingCoupon(false);
+      return;
+    }
+
+    // Check minimum order amount
+    if (coupon.min_order_amount && subtotal < coupon.min_order_amount) {
+      toast.error(`Minimum order amount is ₹${coupon.min_order_amount}`);
+      setApplyingCoupon(false);
+      return;
+    }
+
+    // Calculate discount
+    let discountAmount = 0;
+    if (coupon.discount_type === 'percentage') {
+      discountAmount = (subtotal * (coupon.discount_value || 0)) / 100;
+      if (coupon.max_discount_amount) {
+        discountAmount = Math.min(discountAmount, coupon.max_discount_amount);
+      }
+    } else {
+      discountAmount = coupon.discount_value || 0;
+    }
+
+    setAppliedCoupon({
+      code: coupon.code,
+      discount_type: coupon.discount_type || 'percentage',
+      discount_value: coupon.discount_value || 0,
+      max_discount_amount: coupon.max_discount_amount,
+      discountAmount: discountAmount,
+    });
+
+    toast.success(`Coupon applied! You save ₹${discountAmount.toFixed(0)}`);
+    setCouponCode('');
+    setApplyingCoupon(false);
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    toast.info('Coupon removed');
+  };
+
+  const handleSavePhone = async () => {
+    if (!phoneNumber || phoneNumber.length < 10) {
+      toast.error('Please enter a valid phone number');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ phone: phoneNumber })
+      .eq('id', user!.id);
+
+    if (error) {
+      toast.error('Failed to save phone number');
+      return;
+    }
+
+    setUserPhone(phoneNumber);
+    setPhoneDialogOpen(false);
+    toast.success('Phone number saved!');
+    // Now apply the coupon
+    handleApplyCoupon();
+  };
 
   const handleCheckout = async () => {
     if (!user) {
@@ -103,7 +242,7 @@ export default function Cart() {
         .insert({
           customer_id: user.id,
           restaurant_id: restaurantId!,
-          total_amount: subtotal + finalDeliveryFee + platformFee,
+          total_amount: Math.max(0, subtotal + finalDeliveryFee + platformFee - couponDiscount),
           delivery_address: deliveryAddress,
           notes: notes || null,
           status: 'pending',
@@ -306,6 +445,52 @@ export default function Cart() {
                   </RadioGroup>
                 </div>
 
+                {/* Coupon Section */}
+                <div className="space-y-2">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Tag className="w-3 h-3" />
+                    Apply Coupon
+                  </Label>
+                  {appliedCoupon ? (
+                    <div className="flex items-center justify-between p-3 bg-accent/10 rounded-lg border border-accent/30">
+                      <div className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-accent" />
+                        <span className="font-medium text-sm">{appliedCoupon.code}</span>
+                        <span className="text-xs text-accent">-₹{appliedCoupon.discountAmount.toFixed(0)}</span>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={removeCoupon}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter coupon code"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                        className="text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleApplyCoupon}
+                        disabled={applyingCoupon || !couponCode.trim()}
+                      >
+                        {applyingCoupon ? '...' : 'Apply'}
+                      </Button>
+                    </div>
+                  )}
+                  <Link to="/offers" className="text-xs text-primary hover:underline flex items-center gap-1">
+                    <Tag className="w-3 h-3" />
+                    View all offers
+                  </Link>
+                </div>
+
                 {/* Delivery Info */}
                 <div className="bg-secondary/50 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between text-xs">
@@ -341,13 +526,22 @@ export default function Cart() {
                       <span className="text-accent font-medium">-₹{deliveryFee}</span>
                     </div>
                   )}
+                  {appliedCoupon && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-accent flex items-center gap-1">
+                        <Tag className="w-3.5 h-3.5" />
+                        Coupon Discount
+                      </span>
+                      <span className="text-accent font-medium">-₹{couponDiscount.toFixed(0)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Platform Fee</span>
                     <span>₹{platformFee}</span>
                   </div>
                   <div className="flex justify-between font-bold text-lg pt-2 border-t">
                     <span>Total</span>
-                    <span className="text-primary">₹{(subtotal + finalDeliveryFee + platformFee).toFixed(0)}</span>
+                    <span className="text-primary">₹{Math.max(0, subtotal + finalDeliveryFee + platformFee - couponDiscount).toFixed(0)}</span>
                   </div>
                 </div>
 
@@ -357,13 +551,55 @@ export default function Cart() {
                   onClick={handleCheckout}
                   disabled={loading}
                 >
-                  {loading ? 'Placing Order...' : `Place Order • ₹${(subtotal + finalDeliveryFee + platformFee).toFixed(0)}`}
+                  {loading ? 'Placing Order...' : `Place Order • ₹${Math.max(0, subtotal + finalDeliveryFee + platformFee - couponDiscount).toFixed(0)}`}
                 </Button>
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
+
+      {/* Phone Number Dialog */}
+      <Dialog open={phoneDialogOpen} onOpenChange={setPhoneDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Phone className="w-5 h-5 text-primary" />
+              Mobile Number Required
+            </DialogTitle>
+            <DialogDescription>
+              Please add your mobile number to apply coupons and receive order updates.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="cart-phone">Mobile Number</Label>
+            <Input
+              id="cart-phone"
+              type="tel"
+              placeholder="Enter 10-digit mobile number"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              className="mt-2"
+              maxLength={10}
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              We'll use this number to send order updates
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPhoneDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSavePhone} disabled={phoneNumber.length !== 10}>
+              Save & Apply Coupon
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-}
+});
+
+CartPage.displayName = 'CartPage';
+
+export default CartPage;

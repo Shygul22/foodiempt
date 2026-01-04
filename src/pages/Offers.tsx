@@ -1,10 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Percent, Clock, Gift } from 'lucide-react';
+import React, { useState, useEffect, forwardRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Percent, Clock, Gift, Phone, Check, Copy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Coupon {
   id: string;
@@ -15,6 +26,7 @@ interface Coupon {
   discount_type: string | null;
   discount_value: number | null;
   min_order_amount: number | null;
+  max_discount_amount: number | null;
 }
 
 const bgClasses = [
@@ -31,12 +43,22 @@ const iconColors = [
   'text-status-delivered',
 ];
 
-export default function Offers() {
+const OffersPage = forwardRef<HTMLDivElement>((_, ref) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
+  const [phoneDialogOpen, setPhoneDialogOpen] = useState(false);
+  const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [userPhone, setUserPhone] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCoupons();
+    if (user) {
+      fetchUserPhone();
+    }
 
     // Subscribe to realtime updates
     const channel = supabase
@@ -57,7 +79,7 @@ export default function Offers() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user]);
 
   const fetchCoupons = async () => {
     const { data, error } = await supabase
@@ -72,13 +94,75 @@ export default function Offers() {
     setLoading(false);
   };
 
+  const fetchUserPhone = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('phone')
+      .eq('id', user!.id)
+      .maybeSingle();
+
+    if (data?.phone) {
+      setUserPhone(data.phone);
+      setPhoneNumber(data.phone);
+    }
+  };
+
+  const handleApplyCoupon = (coupon: Coupon) => {
+    if (!user) {
+      toast.error('Please sign in to apply coupons');
+      navigate('/auth');
+      return;
+    }
+
+    if (!userPhone) {
+      setSelectedCoupon(coupon);
+      setPhoneDialogOpen(true);
+    } else {
+      copyCodeAndNavigate(coupon.code);
+    }
+  };
+
+  const handleSavePhoneAndApply = async () => {
+    if (!phoneNumber || phoneNumber.length < 10) {
+      toast.error('Please enter a valid phone number');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ phone: phoneNumber })
+      .eq('id', user!.id);
+
+    if (error) {
+      toast.error('Failed to save phone number');
+      return;
+    }
+
+    setUserPhone(phoneNumber);
+    setPhoneDialogOpen(false);
+    if (selectedCoupon) {
+      copyCodeAndNavigate(selectedCoupon.code);
+    }
+  };
+
+  const copyCodeAndNavigate = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    toast.success(`Code ${code} copied! Redirecting to cart...`);
+    setTimeout(() => {
+      navigate('/cart');
+    }, 1500);
+  };
+
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
+    setCopiedCode(code);
     toast.success(`Code ${code} copied!`);
+    setTimeout(() => setCopiedCode(null), 2000);
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div ref={ref} className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
@@ -100,7 +184,7 @@ export default function Offers() {
               <Card key={i} className="border-0 shadow-lg overflow-hidden animate-pulse">
                 <CardContent className="p-0">
                   <div className="flex">
-                    <div className="w-24 h-24 bg-muted" />
+                    <div className="w-24 h-28 bg-muted" />
                     <div className="flex-1 p-4 space-y-2">
                       <div className="h-5 bg-muted rounded w-3/4" />
                       <div className="h-4 bg-muted rounded w-1/2" />
@@ -124,10 +208,10 @@ export default function Offers() {
             >
               <CardContent className="p-0">
                 <div className="flex">
-                  <div className="w-24 flex items-center justify-center bg-card/50">
-                    <div className="text-center">
+                  <div className="w-24 flex items-center justify-center bg-card/50 border-r-2 border-dashed border-border">
+                    <div className="text-center p-2">
                       <Percent className={`w-8 h-8 mx-auto ${iconColors[index % iconColors.length]}`} />
-                      <p className="text-xs font-bold mt-1">{coupon.code}</p>
+                      <p className="text-xs font-bold mt-1 break-all">{coupon.code}</p>
                     </div>
                   </div>
                   <div className="flex-1 p-4">
@@ -135,16 +219,41 @@ export default function Offers() {
                     {coupon.description && (
                       <p className="text-sm text-muted-foreground mt-1">{coupon.description}</p>
                     )}
-                    <div className="flex items-center justify-between mt-3">
-                      {coupon.valid_till && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {coupon.valid_till}
-                        </span>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => copyCode(coupon.code)}>
-                        Copy Code
-                      </Button>
+                    {coupon.min_order_amount && coupon.min_order_amount > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Min. order: ₹{coupon.min_order_amount}
+                      </p>
+                    )}
+                    <div className="flex items-center justify-between mt-3 gap-2">
+                      <div className="flex-1">
+                        {coupon.valid_till && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {coupon.valid_till}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => copyCode(coupon.code)}
+                        >
+                          {copiedCode === coupon.code ? (
+                            <><Check className="w-3 h-3 mr-1" /> Copied</>
+                          ) : (
+                            <><Copy className="w-3 h-3 mr-1" /> Copy</>
+                          )}
+                        </Button>
+                        <Button 
+                          size="sm"
+                          className="h-8"
+                          onClick={() => handleApplyCoupon(coupon)}
+                        >
+                          Apply
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -162,6 +271,48 @@ export default function Offers() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Phone Number Dialog */}
+      <Dialog open={phoneDialogOpen} onOpenChange={setPhoneDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Phone className="w-5 h-5 text-primary" />
+              Mobile Number Required
+            </DialogTitle>
+            <DialogDescription>
+              Please add your mobile number to apply coupons and receive order updates.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="phone">Mobile Number</Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="Enter 10-digit mobile number"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              className="mt-2"
+              maxLength={10}
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              We'll use this number to send order updates via SMS/WhatsApp
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPhoneDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSavePhoneAndApply} disabled={phoneNumber.length !== 10}>
+              Save & Apply Coupon
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-}
+});
+
+OffersPage.displayName = 'OffersPage';
+
+export default OffersPage;

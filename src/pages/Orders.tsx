@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -60,7 +60,7 @@ const getStepIndex = (status: OrderStatus) => {
   return orderSteps.findIndex(s => s.status === status);
 };
 
-export default function Orders() {
+const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderWithRestaurant[]>([]);
@@ -484,4 +484,8 @@ export default function Orders() {
       </Dialog>
     </div>
   );
-}
+});
+
+OrdersPage.displayName = 'OrdersPage';
+
+export default OrdersPage;
