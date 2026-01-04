@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useDeliveryPartnerNotifications } from '@/hooks/useOrderNotifications';
 
 interface OrderWithDetails extends Order {
   restaurants: { name: string; address: string; phone: string | null } | null;
@@ -122,6 +123,9 @@ export default function DeliveryDashboard() {
       supabase.removeChannel(channel);
     };
   }, [deliveryPartner]);
+
+  // Sound notifications for available orders
+  useDeliveryPartnerNotifications(deliveryPartner?.id, deliveryPartner?.is_available || false);
 
   const fetchData = async () => {
     try {

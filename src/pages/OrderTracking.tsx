@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { useCustomerOrderNotifications } from '@/hooks/useOrderNotifications';
 
 interface OrderWithDetails extends Order {
   restaurants: { 
@@ -72,6 +73,9 @@ export default function OrderTracking() {
       return cleanup;
     }
   }, [user, authLoading, orderId]);
+
+  // Sound notifications for order status changes
+  useCustomerOrderNotifications(orderId);
 
   const fetchOrder = async () => {
     const { data, error } = await supabase
