@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { MenuImageUpload } from '@/components/MenuImageUpload';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -928,13 +929,11 @@ export default function RestaurantDashboard() {
                         />
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Image URL</Label>
-                      <Input
-                        value={menuItemForm.image_url}
-                        onChange={(e) => setMenuItemForm({ ...menuItemForm, image_url: e.target.value })}
-                      />
-                    </div>
+                    <MenuImageUpload
+                      currentImageUrl={menuItemForm.image_url}
+                      onImageChange={(url) => setMenuItemForm({ ...menuItemForm, image_url: url })}
+                      restaurantId={restaurant?.id || ''}
+                    />
                     <Button className="w-full" onClick={addMenuItem}>Add Item</Button>
                   </div>
                 </DialogContent>
@@ -1055,13 +1054,11 @@ export default function RestaurantDashboard() {
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Image URL</Label>
-                    <Input
-                      value={menuItemForm.image_url}
-                      onChange={(e) => setMenuItemForm({ ...menuItemForm, image_url: e.target.value })}
-                    />
-                  </div>
+                  <MenuImageUpload
+                    currentImageUrl={menuItemForm.image_url}
+                    onImageChange={(url) => setMenuItemForm({ ...menuItemForm, image_url: url })}
+                    restaurantId={restaurant?.id || ''}
+                  />
                   <Button className="w-full" onClick={updateMenuItem}>Save Changes</Button>
                 </div>
               </DialogContent>

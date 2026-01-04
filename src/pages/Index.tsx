@@ -12,6 +12,7 @@ import { useCartStore } from '@/stores/cartStore';
 import { CategoryTabs, CategoryType } from '@/components/CategoryTabs';
 import { FavouriteButton } from '@/components/FavouriteButton';
 import { LocationHeader } from '@/components/LocationHeader';
+import { AIRecommendations } from '@/components/AIRecommendations';
 import { 
   Search, 
   MapPin, 
@@ -228,6 +229,9 @@ export default function Index() {
           </div>
         </div>
       </section>
+
+      {/* AI Recommendations */}
+      <AIRecommendations />
 
       {/* Categories */}
       <section className="py-3 bg-card/50 border-b border-border sticky top-[52px] md:top-[60px] z-40">
