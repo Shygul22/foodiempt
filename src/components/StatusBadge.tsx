@@ -17,25 +17,21 @@ interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   status: OrderStatus;
 }
 
-const StatusBadge = React.forwardRef<HTMLSpanElement, StatusBadgeProps>(
-  ({ status, className, ...props }, ref) => {
-    const config = statusConfig[status];
-    
-    return (
-      <span
-        ref={ref}
-        className={cn(
-          'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border',
-          config.className,
-          className
-        )}
-        {...props}
-      >
-        {config.label}
-      </span>
-    );
-  }
-);
-StatusBadge.displayName = 'StatusBadge';
+function StatusBadge({ status, className, ...props }: StatusBadgeProps) {
+  const config = statusConfig[status] || { label: status || 'Unknown', className: 'bg-muted text-muted-foreground border-border' };
+  
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border',
+        config.className,
+        className
+      )}
+      {...props}
+    >
+      {config.label}
+    </span>
+  );
+}
 
 export { StatusBadge };
