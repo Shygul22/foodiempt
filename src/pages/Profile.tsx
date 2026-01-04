@@ -165,9 +165,13 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
                   <>
                     <h2 className="text-xl font-bold">{profile?.full_name || 'Set your name'}</h2>
                     <p className="text-muted-foreground text-sm">{profile?.email}</p>
-                    {profile?.phone && (
+                    {profile?.phone ? (
                       <p className="text-muted-foreground text-sm flex items-center gap-1">
                         <Phone className="w-3 h-3" /> {profile.phone}
+                      </p>
+                    ) : (
+                      <p className="text-destructive text-sm flex items-center gap-1 font-medium">
+                        <Phone className="w-3 h-3" /> Mobile required for orders
                       </p>
                     )}
                     <Button size="sm" variant="ghost" className="mt-2 -ml-2" onClick={() => setEditing(true)}>

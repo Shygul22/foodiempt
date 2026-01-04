@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useRestaurantOrderNotifications } from '@/hooks/useOrderNotifications';
 
 interface OrderWithItems extends Order {
   order_items: { quantity: number; unit_price: number; menu_items: { name: string } | null }[];
@@ -120,6 +121,9 @@ export default function RestaurantDashboard() {
       subscribeToOrders();
     }
   }, [restaurant?.id]);
+
+  // Sound notifications for new orders
+  useRestaurantOrderNotifications(restaurant?.id);
 
   const fetchData = async () => {
     // Fetch restaurant owned by user

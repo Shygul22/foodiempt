@@ -212,14 +212,18 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
     setUserPhone(phoneNumber);
     setPhoneDialogOpen(false);
     toast.success('Phone number saved!');
-    // Now apply the coupon
-    handleApplyCoupon();
   };
 
   const handleCheckout = async () => {
     if (!user) {
       toast.error('Please sign in to checkout');
       navigate('/auth');
+      return;
+    }
+
+    if (!userPhone) {
+      setPhoneDialogOpen(true);
+      toast.error('Please add your mobile number for delivery updates');
       return;
     }
 
@@ -569,7 +573,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
               Mobile Number Required
             </DialogTitle>
             <DialogDescription>
-              Please add your mobile number to apply coupons and receive order updates.
+              Your mobile number is required for delivery partner to contact you and for order updates.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -592,7 +596,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
               Cancel
             </Button>
             <Button onClick={handleSavePhone} disabled={phoneNumber.length !== 10}>
-              Save & Apply Coupon
+              Save & Continue
             </Button>
           </DialogFooter>
         </DialogContent>
