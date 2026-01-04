@@ -280,11 +280,8 @@ export default function DeliveryDashboard() {
     if (error) {
       toast.error(error.message);
     } else {
-      // Add delivery_partner role
-      await supabase.from('user_roles').insert({
-        user_id: user!.id,
-        role: 'delivery_partner',
-      });
+      // Use secure RPC to assign delivery_partner role
+      await supabase.rpc('request_delivery_partner_role');
       
       setDeliveryPartner(data);
       setShowRegister(false);
@@ -309,31 +306,27 @@ export default function DeliveryDashboard() {
     }
   };
 
-  const acceptOrder = async (orderId: string) => {
+  const verifyPickupAndAccept = async (order: OrderWithDetails) => {
     if (!deliveryPartner) return;
-
-    const { error } = await supabase
-      .from('orders')
-      .update({ 
-        delivery_partner_id: deliveryPartner.id,
-        status: 'picked_up' 
-      })
-      .eq('id', orderId);
+    
+    const otpValue = pickupOtpInputs[order.id] || '';
+    
+    // Use secure server-side RPC for OTP verification
+    const { data, error } = await supabase.rpc('verify_pickup_and_accept_order', {
+      _order_id: order.id,
+      _pickup_otp: otpValue
+    });
 
     if (error) {
       toast.error('Failed to accept order');
-    } else {
-      toast.success('Order accepted!');
-      setPickupOtpInputs(prev => ({ ...prev, [orderId]: '' }));
-      setPickupOtpErrors(prev => ({ ...prev, [orderId]: false }));
-      fetchData();
+      return;
     }
-  };
-
-  const verifyPickupAndAccept = (order: OrderWithDetails) => {
-    const otpValue = pickupOtpInputs[order.id] || '';
-    if (otpValue === order.pickup_otp) {
-      acceptOrder(order.id);
+    
+    if (data) {
+      toast.success('Order accepted!');
+      setPickupOtpInputs(prev => ({ ...prev, [order.id]: '' }));
+      setPickupOtpErrors(prev => ({ ...prev, [order.id]: false }));
+      fetchData();
     } else {
       setPickupOtpErrors(prev => ({ ...prev, [order.id]: true }));
       toast.error('Invalid pickup OTP. Please check with the restaurant.');
@@ -356,10 +349,25 @@ export default function DeliveryDashboard() {
     }
   };
 
-  const verifyAndDeliver = (order: OrderWithDetails) => {
+  const verifyAndDeliver = async (order: OrderWithDetails) => {
     const otpValue = deliveryOtpInputs[order.id] || '';
-    if (otpValue === order.delivery_otp) {
-      updateOrderStatus(order.id, 'delivered');
+    
+    // Use secure server-side RPC for OTP verification
+    const { data, error } = await supabase.rpc('verify_delivery_and_complete', {
+      _order_id: order.id,
+      _delivery_otp: otpValue
+    });
+
+    if (error) {
+      toast.error('Failed to update status');
+      return;
+    }
+    
+    if (data) {
+      toast.success('Order delivered!');
+      setDeliveryOtpInputs(prev => ({ ...prev, [order.id]: '' }));
+      setDeliveryOtpErrors(prev => ({ ...prev, [order.id]: false }));
+      fetchData();
     } else {
       setDeliveryOtpErrors(prev => ({ ...prev, [order.id]: true }));
       toast.error('Invalid OTP. Please check with the customer.');

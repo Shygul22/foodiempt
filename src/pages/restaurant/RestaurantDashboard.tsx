@@ -244,11 +244,8 @@ export default function RestaurantDashboard() {
     if (error) {
       toast.error(error.message);
     } else {
-      // Add restaurant_owner role
-      await supabase.from('user_roles').insert({
-        user_id: user!.id,
-        role: 'restaurant_owner',
-      });
+      // Use secure RPC to assign restaurant_owner role
+      await supabase.rpc('request_restaurant_owner_role');
       
       setRestaurant(data);
       setShowCreateRestaurant(false);

@@ -205,6 +205,13 @@ export type Database = {
             foreignKeyName: "order_items_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "order_customer_info"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -395,7 +402,33 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      order_customer_info: {
+        Row: {
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
+          delivery_partner_id: string | null
+          order_id: string | null
+          restaurant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_delivery_partner_id_fkey"
+            columns: ["delivery_partner_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       has_role: {
@@ -403,6 +436,16 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      request_delivery_partner_role: { Args: never; Returns: boolean }
+      request_restaurant_owner_role: { Args: never; Returns: boolean }
+      verify_delivery_and_complete: {
+        Args: { _delivery_otp: string; _order_id: string }
+        Returns: boolean
+      }
+      verify_pickup_and_accept_order: {
+        Args: { _order_id: string; _pickup_otp: string }
         Returns: boolean
       }
     }
