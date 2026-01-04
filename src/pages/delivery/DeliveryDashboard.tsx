@@ -136,6 +136,7 @@ export default function DeliveryDashboard() {
         setDeliveryPartner(partnerData);
         
         // Fetch available orders (ready_for_pickup with no delivery partner)
+        // Include pickup_otp for OTP verification
         const { data: availableData } = await supabase
           .from('orders')
           .select('*, restaurants(name, address, phone)')
@@ -146,14 +147,19 @@ export default function DeliveryDashboard() {
         if (availableData) {
           // Fetch customer profiles for available orders
           const customerIds = availableData.map(o => o.customer_id);
-          const { data: customerProfiles } = await supabase
-            .from('profiles')
-            .select('id, full_name, phone')
-            .in('id', customerIds);
+          let customerProfiles: { id: string; full_name: string | null; phone: string | null }[] = [];
+          
+          if (customerIds.length > 0) {
+            const { data: profilesData } = await supabase
+              .from('profiles')
+              .select('id, full_name, phone')
+              .in('id', customerIds);
+            customerProfiles = profilesData || [];
+          }
 
           const ordersWithProfiles = availableData.map(order => ({
             ...order,
-            customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
+            customer_profile: customerProfiles.find(p => p.id === order.customer_id) || null
           }));
           setAvailableOrders(ordersWithProfiles);
         }
@@ -169,14 +175,19 @@ export default function DeliveryDashboard() {
         if (myOrdersData) {
           // Fetch customer profiles for my orders
           const customerIds = myOrdersData.map(o => o.customer_id);
-          const { data: customerProfiles } = await supabase
-            .from('profiles')
-            .select('id, full_name, phone')
-            .in('id', customerIds);
+          let customerProfiles: { id: string; full_name: string | null; phone: string | null }[] = [];
+          
+          if (customerIds.length > 0) {
+            const { data: profilesData } = await supabase
+              .from('profiles')
+              .select('id, full_name, phone')
+              .in('id', customerIds);
+            customerProfiles = profilesData || [];
+          }
 
           const ordersWithProfiles = myOrdersData.map(order => ({
             ...order,
-            customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
+            customer_profile: customerProfiles.find(p => p.id === order.customer_id) || null
           }));
           setMyOrders(ordersWithProfiles);
         }
