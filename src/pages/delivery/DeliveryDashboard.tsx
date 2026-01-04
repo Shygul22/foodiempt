@@ -73,6 +73,8 @@ export default function DeliveryDashboard() {
   const [myOrders, setMyOrders] = useState<OrderWithDetails[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderWithDetails[]>([]);
   const [earnings, setEarnings] = useState({ today: 0, week: 0, total: 0, pending: 0 });
+  const [avgRating, setAvgRating] = useState<number | null>(null);
+  const [totalRatings, setTotalRatings] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
@@ -233,6 +235,21 @@ export default function DeliveryDashboard() {
           total: totalEarnings,
           pending: pendingSettlement
         });
+
+        // Fetch ratings for this delivery partner
+        const { data: ratingsData } = await supabase
+          .from('order_ratings')
+          .select('rating')
+          .eq('delivery_partner_id', partnerData.id);
+
+        if (ratingsData && ratingsData.length > 0) {
+          const total = ratingsData.reduce((sum, r) => sum + r.rating, 0);
+          setAvgRating(total / ratingsData.length);
+          setTotalRatings(ratingsData.length);
+        } else {
+          setAvgRating(null);
+          setTotalRatings(0);
+        }
       } else {
         setShowRegister(true);
       }
@@ -1205,10 +1222,14 @@ export default function DeliveryDashboard() {
                   </div>
                   <div className="p-3 bg-secondary/50 rounded-lg text-center">
                     <div className="flex items-center justify-center gap-1 mb-1">
-                      <Star className="w-4 h-4 text-yellow-500" />
-                      <span className="text-2xl font-bold">4.8</span>
+                      <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                      <span className="text-2xl font-bold">
+                        {avgRating !== null ? avgRating.toFixed(1) : '—'}
+                      </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">Avg Rating</p>
+                    <p className="text-xs text-muted-foreground">
+                      Avg Rating {totalRatings > 0 ? `(${totalRatings})` : ''}
+                    </p>
                   </div>
                 </div>
                 

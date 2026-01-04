@@ -268,6 +268,51 @@ export type Database = {
           },
         ]
       }
+      order_ratings: {
+        Row: {
+          created_at: string
+          customer_id: string
+          delivery_partner_id: string | null
+          feedback: string | null
+          id: string
+          order_id: string
+          rating: number
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          delivery_partner_id?: string | null
+          feedback?: string | null
+          id?: string
+          order_id: string
+          rating: number
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          delivery_partner_id?: string | null
+          feedback?: string | null
+          id?: string
+          order_id?: string
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_ratings_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "order_customer_info"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "order_ratings_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           created_at: string
