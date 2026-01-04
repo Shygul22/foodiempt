@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { OrderStatus } from '@/types/database';
 
@@ -12,23 +13,29 @@ const statusConfig: Record<OrderStatus, { label: string; className: string }> = 
   cancelled: { label: 'Cancelled', className: 'bg-status-cancelled/10 text-status-cancelled border-status-cancelled/30' },
 };
 
-interface StatusBadgeProps {
+interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   status: OrderStatus;
-  className?: string;
 }
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status];
-  
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border',
-        config.className,
-        className
-      )}
-    >
-      {config.label}
-    </span>
-  );
-}
+const StatusBadge = React.forwardRef<HTMLSpanElement, StatusBadgeProps>(
+  ({ status, className, ...props }, ref) => {
+    const config = statusConfig[status];
+    
+    return (
+      <span
+        ref={ref}
+        className={cn(
+          'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border',
+          config.className,
+          className
+        )}
+        {...props}
+      >
+        {config.label}
+      </span>
+    );
+  }
+);
+StatusBadge.displayName = 'StatusBadge';
+
+export { StatusBadge };

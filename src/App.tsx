@@ -20,6 +20,7 @@ import Refund from "./pages/Refund";
 import Offers from "./pages/Offers";
 import Refer from "./pages/Refer";
 import Promotions from "./pages/Promotions";
+import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/offers" element={<Offers />} />
             <Route path="/refer" element={<Refer />} />
             <Route path="/promotions" element={<Promotions />} />
+            <Route path="/contact" element={<Contact />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

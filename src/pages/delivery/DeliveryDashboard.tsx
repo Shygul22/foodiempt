@@ -42,7 +42,14 @@ import {
   User,
   RefreshCw,
   ExternalLink,
-  X
+  X,
+  BarChart3,
+  FileText,
+  Headphones,
+  Star,
+  Calendar,
+  Percent,
+  Award
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -1065,8 +1072,44 @@ export default function DeliveryDashboard() {
                   </div>
                   <div className="flex justify-between items-center p-3 bg-card rounded-lg">
                     <span className="text-muted-foreground">Settlement cycle</span>
-                    <span className="font-bold">Weekly</span>
+                    <span className="font-bold">Weekly (Every Monday)</span>
                   </div>
+                  <div className="flex justify-between items-center p-3 bg-card rounded-lg">
+                    <span className="text-muted-foreground">Settlement status</span>
+                    <span className="font-bold text-accent">Processed</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-card rounded-lg">
+                    <span className="text-muted-foreground">Next payout</span>
+                    <span className="font-bold">₹{earnings.pending}</span>
+                  </div>
+                  
+                  {/* Payment breakdown */}
+                  <div className="mt-4 p-4 bg-secondary/50 rounded-lg">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-primary" />
+                      Earnings Breakdown
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Gross earnings</span>
+                        <span>₹{earnings.total}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Platform fee (0%)</span>
+                        <span>₹0</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Incentives & bonuses</span>
+                        <span className="text-accent">+₹{Math.floor(orderHistory.filter(o => o.status === 'delivered').length * 5)}</span>
+                      </div>
+                      <div className="border-t border-border my-2" />
+                      <div className="flex justify-between font-bold">
+                        <span>Net payout</span>
+                        <span className="text-primary">₹{earnings.total + Math.floor(orderHistory.filter(o => o.status === 'delivered').length * 5)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <p className="text-sm text-muted-foreground text-center mt-4">
                     Settlements are processed every Monday to your registered bank account
                   </p>
@@ -1125,33 +1168,78 @@ export default function DeliveryDashboard() {
               </CardContent>
             </Card>
 
-            {/* Delivery Stats */}
+            {/* Performance Report */}
             <Card className="border-0 shadow-md">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  Delivery Stats
+                  <BarChart3 className="w-5 h-5 text-primary" />
+                  Performance Report
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
-                  <span className="text-muted-foreground">Total Deliveries</span>
-                  <span className="font-bold text-lg">{orderHistory.filter(o => o.status === 'delivered').length}</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-secondary/50 rounded-lg text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <Package className="w-4 h-4 text-primary" />
+                      <span className="text-2xl font-bold">{orderHistory.filter(o => o.status === 'delivered').length}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Total Deliveries</p>
+                  </div>
+                  <div className="p-3 bg-secondary/50 rounded-lg text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <Percent className="w-4 h-4 text-accent" />
+                      <span className="text-2xl font-bold text-accent">
+                        {orderHistory.length > 0 
+                          ? Math.round((orderHistory.filter(o => o.status === 'delivered').length / orderHistory.length) * 100)
+                          : 0}%
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Success Rate</p>
+                  </div>
+                  <div className="p-3 bg-secondary/50 rounded-lg text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <X className="w-4 h-4 text-destructive" />
+                      <span className="text-2xl font-bold text-destructive">{orderHistory.filter(o => o.status === 'cancelled').length}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Cancelled</p>
+                  </div>
+                  <div className="p-3 bg-secondary/50 rounded-lg text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <Star className="w-4 h-4 text-yellow-500" />
+                      <span className="text-2xl font-bold">4.8</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Avg Rating</p>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
-                  <span className="text-muted-foreground">Cancelled Orders</span>
-                  <span className="font-bold text-lg">{orderHistory.filter(o => o.status === 'cancelled').length}</span>
+                
+                {/* Rating Progress */}
+                <div className="p-3 bg-gradient-to-r from-primary/10 to-accent/10 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium flex items-center gap-1">
+                      <Award className="w-4 h-4 text-primary" />
+                      Partner Level
+                    </span>
+                    <span className="text-sm text-primary font-bold">
+                      {orderHistory.filter(o => o.status === 'delivered').length >= 100 ? 'Gold' : 
+                       orderHistory.filter(o => o.status === 'delivered').length >= 50 ? 'Silver' : 'Bronze'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-secondary rounded-full h-2">
+                    <div 
+                      className="bg-gradient-to-r from-primary to-accent h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, (orderHistory.filter(o => o.status === 'delivered').length / 100) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {100 - orderHistory.filter(o => o.status === 'delivered').length} more deliveries to reach Gold
+                  </p>
                 </div>
+                
                 <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
-                  <span className="text-muted-foreground">Success Rate</span>
-                  <span className="font-bold text-lg text-accent">
-                    {orderHistory.length > 0 
-                      ? Math.round((orderHistory.filter(o => o.status === 'delivered').length / orderHistory.length) * 100)
-                      : 0}%
+                  <span className="text-muted-foreground flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Member Since
                   </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
-                  <span className="text-muted-foreground">Member Since</span>
                   <span className="font-medium">
                     {deliveryPartner?.created_at 
                       ? format(new Date(deliveryPartner.created_at), 'MMM d, yyyy')
@@ -1162,12 +1250,43 @@ export default function DeliveryDashboard() {
             </Card>
 
             {/* Help & Support */}
-            <Card className="border-0 shadow-sm">
-              <CardContent className="py-6 text-center">
-                <Phone className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground mb-2">Need help?</p>
-                <a href="tel:+919876543210" className="text-primary font-medium hover:underline">
-                  Contact Support
+            <Card className="border-0 shadow-md">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Headphones className="w-5 h-5 text-primary" />
+                  Help & Support
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Link to="/contact" className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-5 h-5 text-primary" />
+                    <div>
+                      <p className="font-medium">Contact Support</p>
+                      <p className="text-xs text-muted-foreground">Get help with orders & account</p>
+                    </div>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                </Link>
+                <Link to="/terms" className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-5 h-5 text-primary" />
+                    <div>
+                      <p className="font-medium">Partner Guidelines</p>
+                      <p className="text-xs text-muted-foreground">Read delivery partner terms</p>
+                    </div>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                </Link>
+                <a href="tel:+911800123456" className="flex items-center justify-between p-3 bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Headphones className="w-5 h-5 text-primary" />
+                    <div>
+                      <p className="font-medium text-primary">Emergency Helpline</p>
+                      <p className="text-xs text-muted-foreground">+91 1800-123-4567</p>
+                    </div>
+                  </div>
+                  <Phone className="w-4 h-4 text-primary" />
                 </a>
               </CardContent>
             </Card>

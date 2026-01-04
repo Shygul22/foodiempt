@@ -27,7 +27,8 @@ import {
   Zap,
   TrendingUp,
   User,
-  Gift
+  Gift,
+  Headphones
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -385,6 +386,27 @@ export default function Index() {
           </div>
         </section>
       )}
+
+      {/* Footer */}
+      <footer className="py-8 bg-card border-t border-border">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
+            <Link to="/terms" className="hover:text-primary transition-colors">Terms</Link>
+            <span>•</span>
+            <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
+            <span>•</span>
+            <Link to="/refund" className="hover:text-primary transition-colors">Refund Policy</Link>
+            <span>•</span>
+            <Link to="/contact" className="hover:text-primary transition-colors flex items-center gap-1">
+              <Headphones className="w-3 h-3" />
+              Contact Us
+            </Link>
+          </div>
+          <p className="text-center text-xs text-muted-foreground mt-4">
+            © 2026 DeliveryApp. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
