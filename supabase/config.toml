@@ -1,0 +1,4 @@
+project_id = "mchzexkrbgwwohydkihi"
+
+[functions.recommend-restaurants]
+verify_jwt = false
