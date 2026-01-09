@@ -47,16 +47,10 @@ export function ReviewForm({ orderId, restaurantId, customerId, restaurantName, 
         toast.success('Review submitted successfully!');
         onReviewSubmitted?.();
       }
-<<<<<<< HEAD
     } catch (error: unknown) {
       console.error('Error submitting review:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to submit review';
       toast.error(errorMessage);
-=======
-    } catch (error: any) {
-      console.error('Error submitting review:', error);
-      toast.error(error.message || 'Failed to submit review');
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     } finally {
       setSubmitting(false);
     }
@@ -86,18 +80,10 @@ export function ReviewForm({ orderId, restaurantId, customerId, restaurantName, 
               className="transition-transform hover:scale-110"
             >
               <Star
-<<<<<<< HEAD
                 className={`w-10 h-10 transition-colors ${star <= (hoverRating || rating)
-                    ? 'fill-status-pending text-status-pending'
-                    : 'text-muted-foreground/30'
+                  ? 'fill-status-pending text-status-pending'
+                  : 'text-muted-foreground/30'
                   }`}
-=======
-                className={`w-10 h-10 transition-colors ${
-                  star <= (hoverRating || rating)
-                    ? 'fill-status-pending text-status-pending'
-                    : 'text-muted-foreground/30'
-                }`}
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
               />
             </button>
           ))}

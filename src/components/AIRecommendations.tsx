@@ -40,11 +40,7 @@ export function AIRecommendations() {
       if (data?.recommendations) {
         setRecommendations(data.recommendations);
       }
-<<<<<<< HEAD
     } catch (err: unknown) {
-=======
-    } catch (err: any) {
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
       console.error('Failed to fetch recommendations:', err);
       setError('Unable to load recommendations');
     } finally {
@@ -134,18 +130,10 @@ export function AIRecommendations() {
                   {/* Status Badge */}
                   <Badge
                     variant={restaurant.is_open ? 'default' : 'secondary'}
-<<<<<<< HEAD
                     className={`absolute top-2 right-2 text-[10px] px-1.5 py-0.5 ${restaurant.is_open
-                        ? 'bg-accent text-accent-foreground'
-                        : 'bg-muted/90 text-muted-foreground'
+                      ? 'bg-accent text-accent-foreground'
+                      : 'bg-muted/90 text-muted-foreground'
                       }`}
-=======
-                    className={`absolute top-2 right-2 text-[10px] px-1.5 py-0.5 ${
-                      restaurant.is_open
-                        ? 'bg-accent text-accent-foreground'
-                        : 'bg-muted/90 text-muted-foreground'
-                    }`}
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                   >
                     {restaurant.is_open ? 'Open' : 'Closed'}
                   </Badge>

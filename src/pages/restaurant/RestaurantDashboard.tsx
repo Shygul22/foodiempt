@@ -24,19 +24,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-<<<<<<< HEAD
 import {
   Store,
   ArrowLeft,
   Plus,
   Package,
-=======
-import { 
-  Store, 
-  ArrowLeft, 
-  Plus, 
-  Package, 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   Clock,
   Edit,
   Trash2,
@@ -80,11 +72,7 @@ export default function RestaurantDashboard() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderWithItems[]>([]);
-<<<<<<< HEAD
   const [earnings, setEarnings] = useState({
-=======
-  const [earnings, setEarnings] = useState({ 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     today: 0, week: 0, total: 0, orderCount: 0,
     grossToday: 0, grossWeek: 0, grossTotal: 0,
     deliveryFees: 0, platformFees: 0, commission: 0
@@ -147,11 +135,7 @@ export default function RestaurantDashboard() {
 
     if (restaurantData) {
       setRestaurant(restaurantData);
-<<<<<<< HEAD
 
-=======
-      
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
       // Fetch menu items
       const { data: menuData } = await supabase
         .from('menu_items')
@@ -213,13 +197,8 @@ export default function RestaurantDashboard() {
         const commissionRate = restaurantData.commission_rate || 15;
 
         // Calculate per-order shop earnings (total - delivery - platform - commission)
-<<<<<<< HEAD
         const calculateShopEarnings = (order: OrderWithItems) => {
           const orderDeliveryFee = Number(order.delivery_fee || deliveryFee);
-=======
-        const calculateShopEarnings = (order: any) => {
-          const orderDeliveryFee = Number((order as any).delivery_fee || deliveryFee);
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
           const subtotal = Number(order.total_amount) - orderDeliveryFee - platformFee;
           const commission = (subtotal * commissionRate) / 100;
           return Math.max(0, subtotal - commission);
@@ -236,17 +215,10 @@ export default function RestaurantDashboard() {
         const weekShopEarnings = weekOrders.reduce((sum, o) => sum + calculateShopEarnings(o), 0);
         const totalShopEarnings = deliveredOrders.reduce((sum, o) => sum + calculateShopEarnings(o), 0);
 
-<<<<<<< HEAD
         const totalDeliveryFees = deliveredOrders.reduce((sum, o) => sum + Number(o.delivery_fee || deliveryFee), 0);
         const totalPlatformFees = deliveredOrders.length * platformFee;
         const totalCommission = deliveredOrders.reduce((sum, o) => {
           const orderDeliveryFee = Number(o.delivery_fee || deliveryFee);
-=======
-        const totalDeliveryFees = deliveredOrders.reduce((sum, o) => sum + Number((o as any).delivery_fee || deliveryFee), 0);
-        const totalPlatformFees = deliveredOrders.length * platformFee;
-        const totalCommission = deliveredOrders.reduce((sum, o) => {
-          const orderDeliveryFee = Number((o as any).delivery_fee || deliveryFee);
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
           const subtotal = Number(o.total_amount) - orderDeliveryFee - platformFee;
           return sum + (subtotal * commissionRate) / 100;
         }, 0);
@@ -278,11 +250,7 @@ export default function RestaurantDashboard() {
   };
 
   // Filtered data
-<<<<<<< HEAD
   const filteredOrders = orders.filter(o =>
-=======
-  const filteredOrders = orders.filter(o => 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     o.id.toLowerCase().includes(searchOrders.toLowerCase()) ||
     (o.customer_profile?.full_name?.toLowerCase().includes(searchOrders.toLowerCase()))
   );
@@ -340,11 +308,7 @@ export default function RestaurantDashboard() {
     } else {
       // Use secure RPC to assign restaurant_owner role
       await supabase.rpc('request_restaurant_owner_role');
-<<<<<<< HEAD
 
-=======
-      
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
       setRestaurant(data);
       setShowCreateRestaurant(false);
       toast.success('Shop created! Awaiting admin verification.');
@@ -390,13 +354,8 @@ export default function RestaurantDashboard() {
     if (error) {
       toast.error('Failed to update location');
     } else {
-<<<<<<< HEAD
       setRestaurant(prev => prev ? {
         ...prev,
-=======
-      setRestaurant(prev => prev ? { 
-        ...prev, 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
         lat: restaurantForm.lat ? parseFloat(restaurantForm.lat) : null,
         lng: restaurantForm.lng ? parseFloat(restaurantForm.lng) : null,
       } : null);
@@ -791,11 +750,7 @@ export default function RestaurantDashboard() {
                           <span className="text-sm font-medium">{order.customer_profile?.full_name || 'Customer'}</span>
                         </div>
                         {order.customer_profile?.phone && (
-<<<<<<< HEAD
                           <a
-=======
-                          <a 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                             href={`tel:${order.customer_profile.phone}`}
                             className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
                           >
@@ -811,11 +766,7 @@ export default function RestaurantDashboard() {
                           📍 {order.delivery_address}
                         </p>
                       )}
-<<<<<<< HEAD
 
-=======
-                      
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                       <div className="space-y-1 mb-3">
                         {order.order_items.map((item, idx) => (
                           <p key={idx} className="text-sm">
@@ -857,11 +808,7 @@ export default function RestaurantDashboard() {
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Keep Order</AlertDialogCancel>
-<<<<<<< HEAD
                                     <AlertDialogAction
-=======
-                                    <AlertDialogAction 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                                       onClick={() => cancelOrder(order.id)}
                                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                     >
@@ -893,11 +840,7 @@ export default function RestaurantDashboard() {
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Keep Order</AlertDialogCancel>
-<<<<<<< HEAD
                                     <AlertDialogAction
-=======
-                                    <AlertDialogAction 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                                       onClick={() => cancelOrder(order.id)}
                                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                     >
@@ -1297,11 +1240,7 @@ export default function RestaurantDashboard() {
                 <p className="text-sm text-muted-foreground">
                   Set your shop's GPS location so customers can see distance and get accurate delivery estimates.
                 </p>
-<<<<<<< HEAD
 
-=======
-                
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                 <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                   <div>
                     <p className="text-sm font-medium">Current Location</p>
@@ -1353,13 +1292,8 @@ export default function RestaurantDashboard() {
                   </div>
                 </div>
 
-<<<<<<< HEAD
                 <Button
                   onClick={updateShopLocation}
-=======
-                <Button 
-                  onClick={updateShopLocation} 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                   disabled={!restaurantForm.lat || !restaurantForm.lng}
                   className="w-full"
                 >

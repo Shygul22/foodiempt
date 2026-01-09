@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 project_id = "mchzexkrbgwwohydkihi"
-=======
-project_id = "pdbedggratahewefjqeh"
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
 
 [functions.recommend-restaurants]
 verify_jwt = false
