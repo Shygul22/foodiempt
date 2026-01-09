@@ -60,16 +60,10 @@ export function MenuImageUpload({ currentImageUrl, onImageChange, restaurantId }
       setPreviewUrl(publicUrl);
       onImageChange(publicUrl);
       toast.success('Image uploaded successfully');
-<<<<<<< HEAD
     } catch (error: unknown) {
       console.error('Upload error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to upload image';
       toast.error(errorMessage);
-=======
-    } catch (error: any) {
-      console.error('Upload error:', error);
-      toast.error(error.message || 'Failed to upload image');
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     } finally {
       setUploading(false);
     }
@@ -86,11 +80,7 @@ export function MenuImageUpload({ currentImageUrl, onImageChange, restaurantId }
   return (
     <div className="space-y-2">
       <Label>Product Image</Label>
-<<<<<<< HEAD
 
-=======
-      
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
       {previewUrl ? (
         <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
           <img

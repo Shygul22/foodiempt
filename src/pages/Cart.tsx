@@ -11,19 +11,11 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { AddressSelector } from '@/components/AddressSelector';
 import { ScheduleDelivery } from '@/components/ScheduleDelivery';
-<<<<<<< HEAD
 import {
   ArrowLeft,
   Minus,
   Plus,
   Trash2,
-=======
-import { 
-  ArrowLeft, 
-  Minus, 
-  Plus, 
-  Trash2, 
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   ShoppingBag,
   Banknote,
   Smartphone,
@@ -67,20 +59,12 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [restaurant, setRestaurant] = useState<{ name: string; address: string } | null>(null);
-<<<<<<< HEAD
 
-=======
-  
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   // Coupon states
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
   const [applyingCoupon, setApplyingCoupon] = useState(false);
-<<<<<<< HEAD
 
-=======
-  
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   // Phone verification
   const [phoneDialogOpen, setPhoneDialogOpen] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -101,11 +85,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
       .select('name, address')
       .eq('id', restaurantId!)
       .single();
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     if (data) {
       setRestaurant(data);
     }
@@ -163,11 +143,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
     }
 
     setApplyingCoupon(true);
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     const { data: coupon, error } = await supabase
       .from('coupons')
       .select('*')
@@ -301,16 +277,10 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
       clearCart();
       toast.success('Order placed successfully!');
       navigate('/orders');
-<<<<<<< HEAD
     } catch (error: unknown) {
       console.error('Checkout error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to place order';
       toast.error(errorMessage);
-=======
-    } catch (error: any) {
-      console.error('Checkout error:', error);
-      toast.error(error.message || 'Failed to place order');
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     } finally {
       setLoading(false);
     }

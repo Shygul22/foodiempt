@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-<<<<<<< HEAD @layer base {
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+
+@layer base {
   :root {
     --sat: env(safe-area-inset-top);
     --sab: env(safe-area-inset-bottom);
@@ -18,8 +20,6 @@
     -webkit-tap-highlight-color: transparent;
   }
 }
-
-=======>>>>>>>f90644cdeefd6be224926a581cb731aa56204a3f @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
 
 @layer base {
   :root {
