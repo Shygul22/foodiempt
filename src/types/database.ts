@@ -2,6 +2,7 @@ export type AppRole = 'super_admin' | 'restaurant_owner' | 'delivery_partner' | 
 
 export type ShopCategory = 'food' | 'grocery' | 'fruits' | 'vegetables' | 'meat' | 'medicine' | 'bakery' | 'beverages';
 
+<<<<<<< HEAD
 export type OrderStatus =
   | 'pending'
   | 'confirmed'
@@ -10,6 +11,16 @@ export type OrderStatus =
   | 'picked_up'
   | 'on_the_way'
   | 'delivered'
+=======
+export type OrderStatus = 
+  | 'pending' 
+  | 'confirmed' 
+  | 'preparing' 
+  | 'ready_for_pickup' 
+  | 'picked_up' 
+  | 'on_the_way' 
+  | 'delivered' 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   | 'cancelled';
 
 export interface Profile {
@@ -86,7 +97,10 @@ export interface Order {
   pickup_otp: string | null;
   scheduled_at: string | null;
   is_scheduled: boolean;
+<<<<<<< HEAD
   delivery_fee: number | null;
+=======
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   created_at: string;
   updated_at: string;
 }

@@ -13,11 +13,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+<<<<<<< HEAD
 import {
   MapPin,
   Plus,
   Home,
   Briefcase,
+=======
+import { 
+  MapPin, 
+  Plus, 
+  Home, 
+  Briefcase, 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   MapPinned,
   Check,
   Trash2
@@ -55,7 +63,11 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
       .select('*')
       .eq('user_id', user!.id)
       .order('is_default', { ascending: false });
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     if (data) {
       setAddresses(data as CustomerAddress[]);
       // If no address selected and we have saved addresses, select default or first
@@ -93,9 +105,14 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
       setNewAddress('');
       setShowAddDialog(false);
       toast.success('Address saved!');
+<<<<<<< HEAD
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to save address';
       toast.error(errorMessage);
+=======
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save address');
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     } finally {
       setLoading(false);
     }
@@ -107,7 +124,11 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
         .from('customer_addresses')
         .delete()
         .eq('id', id);
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
       setAddresses(addresses.filter(a => a.id !== id));
       toast.success('Address deleted');
     } catch (error) {
@@ -122,13 +143,21 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
         .from('customer_addresses')
         .update({ is_default: false })
         .eq('user_id', user!.id);
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
       // Set new default
       await supabase
         .from('customer_addresses')
         .update({ is_default: true })
         .eq('id', id);
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
       fetchAddresses();
       toast.success('Default address updated');
     } catch (error) {
@@ -186,8 +215,13 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
                 />
               </div>
 
+<<<<<<< HEAD
               <Button
                 onClick={addAddress}
+=======
+              <Button 
+                onClick={addAddress} 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                 disabled={loading || !newAddress.trim()}
                 className="w-full"
               >

@@ -7,7 +7,11 @@ let audioContext: AudioContext | null = null;
 
 const getAudioContext = () => {
   if (!audioContext) {
+<<<<<<< HEAD
     audioContext = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
+=======
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   }
   return audioContext;
 };
@@ -103,12 +107,20 @@ export const useCustomerOrderNotifications = (orderId: string | undefined) => {
           table: 'orders',
           filter: `id=eq.${orderId}`,
         },
+<<<<<<< HEAD
         (payload: unknown) => {
           const p = payload as { new: { status: string } };
           const newStatus = p.new?.status;
           if (previousStatusRef.current && newStatus !== previousStatusRef.current) {
             playNotificationSound('status');
 
+=======
+        (payload: any) => {
+          const newStatus = payload.new?.status;
+          if (previousStatusRef.current && newStatus !== previousStatusRef.current) {
+            playNotificationSound('status');
+            
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
             const statusMessages: Record<string, string> = {
               confirmed: '✅ Order confirmed by restaurant!',
               preparing: '👨‍🍳 Your order is being prepared',
@@ -149,6 +161,7 @@ export const useDeliveryPartnerNotifications = (partnerId: string | undefined, i
           schema: 'public',
           table: 'orders',
         },
+<<<<<<< HEAD
         (payload) => {
           const p = payload as unknown as { new: { status: string; delivery_partner_id: string | null }; old: { status: string } };
           // Notify when an order becomes ready for pickup
@@ -157,6 +170,15 @@ export const useDeliveryPartnerNotifications = (partnerId: string | undefined, i
             p.new?.status === 'ready_for_pickup' &&
             p.old?.status !== 'ready_for_pickup' &&
             !p.new?.delivery_partner_id
+=======
+        (payload: any) => {
+          // Notify when an order becomes ready for pickup
+          if (
+            !initialLoadRef.current &&
+            payload.new?.status === 'ready_for_pickup' &&
+            payload.old?.status !== 'ready_for_pickup' &&
+            !payload.new?.delivery_partner_id
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
           ) {
             playNotificationSound('order');
             toast.success('🚴 New delivery available!', {

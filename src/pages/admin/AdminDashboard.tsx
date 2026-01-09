@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { useState, useEffect, useCallback } from 'react';
+=======
+import { useState, useEffect } from 'react';
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,11 +32,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+<<<<<<< HEAD
 import {
   Shield,
   Store,
   Package,
   DollarSign,
+=======
+import { 
+  Shield, 
+  Store, 
+  Package, 
+  DollarSign, 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
   ArrowLeft,
   Check,
   X,
@@ -102,7 +114,23 @@ export default function AdminDashboard() {
   const [searchUsers, setSearchUsers] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
 
+<<<<<<< HEAD
   const fetchData = useCallback(async () => {
+=======
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user || !hasRole('super_admin')) {
+        toast.error('Access denied');
+        navigate('/');
+        return;
+      }
+      fetchData();
+      subscribeToChanges();
+    }
+  }, [user, authLoading, hasRole]);
+
+  const fetchData = async () => {
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     const [restaurantsRes, ordersRes, partnersRes, profilesRes] = await Promise.all([
       supabase.from('restaurants').select('*').order('created_at', { ascending: false }),
       supabase
@@ -125,7 +153,11 @@ export default function AdminDashboard() {
 
     if (ordersRes.data) {
       setOrders(ordersRes.data);
+<<<<<<< HEAD
       const activeOrders = ordersRes.data.filter(o =>
+=======
+      const activeOrders = ordersRes.data.filter(o => 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
         !['delivered', 'cancelled'].includes(o.status)
       ).length;
       const totalRevenue = ordersRes.data.reduce(
@@ -135,7 +167,11 @@ export default function AdminDashboard() {
       // Calculate delivery fee and platform fee earnings (from delivered orders only)
       const deliveredOrders = ordersRes.data.filter(o => o.status === 'delivered');
       const deliveryFeeEarnings = deliveredOrders.reduce(
+<<<<<<< HEAD
         (sum, order) => sum + Number(order.delivery_fee || 25),
+=======
+        (sum, order) => sum + Number((order as any).delivery_fee || 25),
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
         0
       );
       const platformFee = 8; // Fixed platform fee per order
@@ -170,7 +206,11 @@ export default function AdminDashboard() {
         ...profile,
         roles: rolesData?.filter(r => r.user_id === profile.id).map(r => r.role as AppRole) || []
       }));
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
       setUsers(usersWithRoles);
       setStats((prev) => ({
         ...prev,
@@ -180,6 +220,7 @@ export default function AdminDashboard() {
 
     setLoading(false);
     setRefreshing(false);
+<<<<<<< HEAD
   }, []);
 
   useEffect(() => {
@@ -193,6 +234,9 @@ export default function AdminDashboard() {
       subscribeToChanges();
     }
   }, [user, authLoading, hasRole, fetchData]);
+=======
+  };
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -200,7 +244,11 @@ export default function AdminDashboard() {
   };
 
   // Filtered data
+<<<<<<< HEAD
   const filteredRestaurants = restaurants.filter(r =>
+=======
+  const filteredRestaurants = restaurants.filter(r => 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     r.name.toLowerCase().includes(searchShops.toLowerCase()) ||
     (r.cuisine_type?.toLowerCase().includes(searchShops.toLowerCase()))
   );
@@ -212,7 +260,11 @@ export default function AdminDashboard() {
     return matchesSearch && matchesStatus;
   });
 
+<<<<<<< HEAD
   const filteredUsers = users.filter(u =>
+=======
+  const filteredUsers = users.filter(u => 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
     (u.full_name?.toLowerCase().includes(searchUsers.toLowerCase())) ||
     u.email.toLowerCase().includes(searchUsers.toLowerCase())
   );
@@ -533,18 +585,31 @@ export default function AdminDashboard() {
                 <ScrollArea className="h-[500px]">
                   <div className="p-4 space-y-3">
                     {filteredRestaurants.map((restaurant) => (
+<<<<<<< HEAD
                       <div
                         key={restaurant.id}
+=======
+                      <div 
+                        key={restaurant.id} 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                         className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="font-semibold truncate">{restaurant.name}</h4>
+<<<<<<< HEAD
                               <span className={`text-xs px-2 py-0.5 rounded-full ${restaurant.is_open
                                 ? 'bg-accent/20 text-accent'
                                 : 'bg-muted text-muted-foreground'
                                 }`}>
+=======
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                restaurant.is_open 
+                                  ? 'bg-accent/20 text-accent' 
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                                 {restaurant.is_open ? 'Open' : 'Closed'}
                               </span>
                             </div>
@@ -557,7 +622,11 @@ export default function AdminDashboard() {
                             />
                           </div>
                         </div>
+<<<<<<< HEAD
 
+=======
+                        
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
                           <Input
                             type="number"
@@ -633,8 +702,13 @@ export default function AdminDashboard() {
                 <ScrollArea className="h-[500px]">
                   <div className="p-4 space-y-3">
                     {filteredOrders.map((order) => (
+<<<<<<< HEAD
                       <div
                         key={order.id}
+=======
+                      <div 
+                        key={order.id} 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                         className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -698,28 +772,51 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {deliveryPartners.map((partner) => (
+<<<<<<< HEAD
                     <div
+=======
+                    <div 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                       key={partner.id}
                       className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
                     >
                       <div className="flex items-start gap-3">
+<<<<<<< HEAD
                         <div className={`w-12 h-12 rounded-full flex items-center justify-center ${partner.is_available ? 'bg-accent/20' : 'bg-muted'
                           }`}>
+=======
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                          partner.is_available ? 'bg-accent/20' : 'bg-muted'
+                        }`}>
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                           <Bike className={`w-6 h-6 ${partner.is_available ? 'text-accent' : 'text-muted-foreground'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <p className="text-sm font-semibold">Partner #{partner.id.slice(0, 6)}</p>
+<<<<<<< HEAD
                             <span className={`text-xs px-2 py-0.5 rounded-full ${partner.is_available
                               ? 'bg-accent/20 text-accent'
                               : 'bg-muted text-muted-foreground'
                               }`}>
+=======
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              partner.is_available 
+                                ? 'bg-accent/20 text-accent' 
+                                : 'bg-muted text-muted-foreground'
+                            }`}>
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                               {partner.is_available ? 'Online' : 'Offline'}
                             </span>
                           </div>
                           {partner.phone && (
+<<<<<<< HEAD
                             <a
                               href={`tel:${partner.phone}`}
+=======
+                            <a 
+                              href={`tel:${partner.phone}`} 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                               className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
                             >
                               <Phone className="w-3 h-3" />
@@ -773,8 +870,13 @@ export default function AdminDashboard() {
                 <ScrollArea className="h-[500px]">
                   <div className="p-4 space-y-3">
                     {filteredUsers.map((u) => (
+<<<<<<< HEAD
                       <div
                         key={u.id}
+=======
+                      <div 
+                        key={u.id} 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                         className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -783,7 +885,11 @@ export default function AdminDashboard() {
                             <p className="text-sm text-muted-foreground">{u.email}</p>
                             <div className="flex flex-wrap gap-2 mt-2">
                               {u.roles.map((role) => (
+<<<<<<< HEAD
                                 <span
+=======
+                                <span 
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                                   key={role}
                                   className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-primary/10 text-primary"
                                 >
@@ -802,7 +908,11 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                         </div>
+<<<<<<< HEAD
 
+=======
+                        
+>>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
                         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
                           <Select
                             value={selectedRole[u.id] || ''}
