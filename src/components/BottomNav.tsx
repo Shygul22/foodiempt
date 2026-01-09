@@ -1,12 +1,19 @@
 import { Home, Search, ShoppingBag, User, Compass } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useHaptics } from "@/hooks/useHaptics";
+import { ImpactStyle } from "@capacitor/haptics";
 
 const BottomNav = () => {
     const location = useLocation();
+    const { impact } = useHaptics();
 
     const isActive = (path: string) => {
         return location.pathname === path;
+    };
+
+    const handleNavClick = () => {
+        impact(ImpactStyle.Light);
     };
 
     const navItems = [
@@ -39,6 +46,7 @@ const BottomNav = () => {
                     <Link
                         key={item.path}
                         to={item.path}
+                        onClick={handleNavClick}
                         className={cn(
                             "flex flex-col items-center justify-center w-full h-full space-y-1 text-sm transition-colors duration-200",
                             isActive(item.path)

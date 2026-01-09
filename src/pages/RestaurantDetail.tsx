@@ -8,16 +8,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { RestaurantReviews } from '@/components/RestaurantReviews';
 import { 
-  ArrowLeft, 
-  MapPin, 
-  Clock, 
-  Star, 
-  Plus, 
-  Minus, 
-  ShoppingCart,
-  Utensils 
-} from 'lucide-react';
+import {
+    ArrowLeft,
+    MapPin,
+    Clock,
+    Star,
+    Plus,
+    Minus,
+    ShoppingCart,
+    Utensils
+  } from 'lucide-react';
 import { toast } from 'sonner';
+import { useHaptics } from "@/hooks/useHaptics";
+import { ImpactStyle, NotificationType } from "@capacitor/haptics";
 
 const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +30,7 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
   const [reviewStats, setReviewStats] = useState({ average: 0, count: 0 });
   const [loading, setLoading] = useState(true);
   const { items, addItem, updateQuantity, getTotalItems, getTotalAmount } = useCartStore();
+  const { impact, notification } = useHaptics();
 
   useEffect(() => {
     if (id) {
@@ -62,17 +66,21 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
   const handleAddItem = (menuItem: MenuItem) => {
     if (!user) {
       toast.error('Please sign in to add items to cart');
+      notification(NotificationType.Error);
       return;
     }
     if (!restaurant?.is_open) {
       toast.error('This shop is currently closed');
+      notification(NotificationType.Error);
       return;
     }
+    impact(ImpactStyle.Medium);
     addItem(menuItem, restaurant!.id);
     toast.success(`Added ${menuItem.name} to cart`);
   };
 
   const handleUpdateQuantity = (menuItemId: string, delta: number) => {
+    impact(ImpactStyle.Light);
     const currentQty = getItemQuantity(menuItemId);
     updateQuantity(menuItemId, currentQty + delta);
   };
@@ -145,11 +153,10 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
         <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-6">
           <div className="container mx-auto">
-            <div className={`inline-flex px-3 py-1 rounded-full text-sm font-medium mb-3 ${
-              restaurant.is_open 
-                ? 'bg-accent text-accent-foreground' 
+            <div className={`inline-flex px-3 py-1 rounded-full text-sm font-medium mb-3 ${restaurant.is_open
+                ? 'bg-accent text-accent-foreground'
                 : 'bg-destructive text-destructive-foreground'
-            }`}>
+              }`}>
               {restaurant.is_open ? 'Open Now' : 'Closed'}
             </div>
             <h1 className="text-3xl lg:text-4xl font-bold text-foreground mb-2">{restaurant.name}</h1>

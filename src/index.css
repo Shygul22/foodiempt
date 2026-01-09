@@ -2,8 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-<<<<<<< HEAD
-@layer base {
+<<<<<<< HEAD @layer base {
   :root {
     --sat: env(safe-area-inset-top);
     --sab: env(safe-area-inset-bottom);
@@ -16,12 +15,11 @@
     padding-bottom: var(--sab);
     padding-left: var(--sal);
     padding-right: var(--sar);
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
-=======
->>>>>>> f90644cdeefd6be224926a581cb731aa56204a3f
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+=======>>>>>>>f90644cdeefd6be224926a581cb731aa56204a3f @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
 
 @layer base {
   :root {
@@ -189,12 +187,18 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
+
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+  }
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -205,6 +209,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -216,6 +221,7 @@
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -223,18 +229,24 @@
 }
 
 @keyframes pulseSoft {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.7;
   }
 }
 
 @keyframes bounceSubtle {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-4px);
   }
