@@ -9,7 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Utensils, Mail, Lock, User, Chrome } from 'lucide-react';
+import { Utensils, Mail, Lock, User, Chrome, Phone } from 'lucide-react';
+import { PhoneLogin } from '@/components/auth/PhoneLogin';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
@@ -17,14 +19,24 @@ export default function Auth() {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, user, hasRole } = useAuth();
   const navigate = useNavigate();
+
+  const { isPhoneLoginEnabled, loading: settingsLoading } = useAppSettings();
 
   useEffect(() => {
     if (user) {
-      navigate('/');
+      if (hasRole('super_admin')) {
+        navigate('/admin');
+      } else if (hasRole('restaurant_owner')) {
+        navigate('/restaurant');
+      } else if (hasRole('delivery_partner')) {
+        navigate('/delivery');
+      } else {
+        navigate('/');
+      }
     }
-  }, [user, navigate]);
+  }, [user, navigate, hasRole]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +51,6 @@ export default function Auth() {
       toast.error(error.message);
     } else {
       toast.success('Welcome back!');
-      navigate('/');
     }
   };
 
@@ -64,7 +75,6 @@ export default function Auth() {
       }
     } else {
       toast.success('Account created successfully!');
-      navigate('/');
     }
   };
 
@@ -76,7 +86,7 @@ export default function Auth() {
         redirectTo: `${window.location.origin}/`,
       },
     });
-    
+
     if (error) {
       toast.error(error.message);
       setGoogleLoading(false);
@@ -97,15 +107,26 @@ export default function Auth() {
         <Card className="shadow-lg border-0">
           <CardHeader className="pb-4">
             <Tabs defaultValue="signin" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className={`grid w-full ${isPhoneLoginEnabled() ? 'grid-cols-3' : 'grid-cols-2'}`}>
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                {isPhoneLoginEnabled() && <TabsTrigger value="phone">Phone</TabsTrigger>}
               </TabsList>
-              
+
+              {isPhoneLoginEnabled() && (
+                <TabsContent value="phone" className="mt-6">
+                  <CardTitle className="text-xl">Phone Login</CardTitle>
+                  <CardDescription>Sign in with your mobile number</CardDescription>
+                  <div className="mt-4">
+                    <PhoneLogin />
+                  </div>
+                </TabsContent>
+              )}
+
               <TabsContent value="signin" className="mt-6">
                 <CardTitle className="text-xl">Welcome back</CardTitle>
                 <CardDescription>Enter your credentials to access your account</CardDescription>
-                
+
                 {/* Google Sign In */}
                 <Button
                   type="button"
@@ -117,7 +138,7 @@ export default function Auth() {
                   <Chrome className="w-4 h-4" />
                   {googleLoading ? 'Connecting...' : 'Continue with Google'}
                 </Button>
-                
+
                 <div className="relative my-4">
                   <Separator />
                   <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
@@ -159,11 +180,11 @@ export default function Auth() {
                   </Button>
                 </form>
               </TabsContent>
-              
+
               <TabsContent value="signup" className="mt-6">
                 <CardTitle className="text-xl">Create account</CardTitle>
                 <CardDescription>Join FoodDash to start ordering</CardDescription>
-                
+
                 {/* Google Sign Up */}
                 <Button
                   type="button"
@@ -175,7 +196,7 @@ export default function Auth() {
                   <Chrome className="w-4 h-4" />
                   {googleLoading ? 'Connecting...' : 'Continue with Google'}
                 </Button>
-                
+
                 <div className="relative my-4">
                   <Separator />
                   <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">

@@ -5,12 +5,14 @@ import { CartItem, MenuItem } from '@/types/database';
 interface CartState {
   items: CartItem[];
   restaurantId: string | null;
+  deliveryAddress: string;
   addItem: (menuItem: MenuItem, restaurantId: string) => void;
   removeItem: (menuItemId: string) => void;
   updateQuantity: (menuItemId: string, quantity: number) => void;
   clearCart: () => void;
   getTotalAmount: () => number;
   getTotalItems: () => number;
+  setDeliveryAddress: (address: string) => void;
 }
 
 export const useCartStore = create<CartState>()(
@@ -18,10 +20,11 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
       restaurantId: null,
+      deliveryAddress: '',
 
       addItem: (menuItem: MenuItem, restaurantId: string) => {
         const { items, restaurantId: currentRestaurantId } = get();
-        
+
         // If adding from a different restaurant, clear cart first
         if (currentRestaurantId && currentRestaurantId !== restaurantId) {
           set({ items: [{ menuItem, quantity: 1 }], restaurantId });
@@ -29,7 +32,7 @@ export const useCartStore = create<CartState>()(
         }
 
         const existingItem = items.find((item) => item.menuItem.id === menuItem.id);
-        
+
         if (existingItem) {
           set({
             items: items.map((item) =>
@@ -82,6 +85,10 @@ export const useCartStore = create<CartState>()(
 
       getTotalItems: () => {
         return get().items.reduce((total, item) => total + item.quantity, 0);
+      },
+
+      setDeliveryAddress: (address: string) => {
+        set({ deliveryAddress: address });
       },
     }),
     {

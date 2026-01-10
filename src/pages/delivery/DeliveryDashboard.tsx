@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { Order, OrderStatus, DeliveryPartner } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,11 +22,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { 
-  Bike, 
-  ArrowLeft, 
-  MapPin, 
-  Navigation, 
+import {
+  Bike,
+  ArrowLeft,
+  MapPin,
+  Navigation,
   Package,
   Clock,
   CheckCircle,
@@ -73,6 +74,13 @@ export default function DeliveryDashboard() {
   const [availableOrders, setAvailableOrders] = useState<OrderWithDetails[]>([]);
   const [myOrders, setMyOrders] = useState<OrderWithDetails[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderWithDetails[]>([]);
+  const { settings } = useAppSettings();
+
+  useEffect(() => {
+    // ... (existing code)
+  }, []);
+
+  // State declarations moved from invalid position
   const [earnings, setEarnings] = useState({ today: 0, week: 0, total: 0, pending: 0 });
   const [avgRating, setAvgRating] = useState<number | null>(null);
   const [totalRatings, setTotalRatings] = useState(0);
@@ -83,51 +91,14 @@ export default function DeliveryDashboard() {
   const [deliveryOtpErrors, setDeliveryOtpErrors] = useState<Record<string, boolean>>({});
   const [pickupOtpInputs, setPickupOtpInputs] = useState<Record<string, string>>({});
   const [pickupOtpErrors, setPickupOtpErrors] = useState<Record<string, boolean>>({});
-  
+
   // Phone verification states
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationOtp, setVerificationOtp] = useState('');
   const [showVerificationInput, setShowVerificationInput] = useState(false);
   const [generatedOtp, setGeneratedOtp] = useState('');
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
-      fetchData();
-    }
-  }, [user, authLoading]);
-
-  // Real-time order updates
-  useEffect(() => {
-    if (!deliveryPartner) return;
-
-    const channel = supabase
-      .channel('delivery-orders')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders'
-        },
-        () => {
-          fetchData();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [deliveryPartner]);
-
-  // Sound notifications for available orders
-  useDeliveryPartnerNotifications(deliveryPartner?.id, deliveryPartner?.is_available || false);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       // Check if user is a delivery partner
       const { data: partnerData } = await supabase
@@ -147,7 +118,7 @@ export default function DeliveryDashboard() {
 
       if (partnerData) {
         setDeliveryPartner(partnerData);
-        
+
         // Fetch available orders (ready_for_pickup with no delivery partner)
         // Include pickup_otp for OTP verification
         const { data: availableData } = await supabase
@@ -161,7 +132,7 @@ export default function DeliveryDashboard() {
           // Fetch customer profiles for available orders
           const customerIds = availableData.map(o => o.customer_id);
           let customerProfiles: { id: string; full_name: string | null; phone: string | null }[] = [];
-          
+
           if (customerIds.length > 0) {
             const { data: profilesData } = await supabase
               .from('profiles')
@@ -178,18 +149,19 @@ export default function DeliveryDashboard() {
         }
 
         // Fetch my orders with customer info
+        // Now includes 'ready_for_pickup' orders assigned to me
         const { data: myOrdersData } = await supabase
           .from('orders')
           .select('*, restaurants(name, address, phone)')
           .eq('delivery_partner_id', partnerData.id)
-          .in('status', ['picked_up', 'on_the_way'])
+          .in('status', ['ready_for_pickup', 'picked_up', 'on_the_way'])
           .order('created_at', { ascending: false });
 
         if (myOrdersData) {
           // Fetch customer profiles for my orders
           const customerIds = myOrdersData.map(o => o.customer_id);
           let customerProfiles: { id: string; full_name: string | null; phone: string | null }[] = [];
-          
+
           if (customerIds.length > 0) {
             const { data: profilesData } = await supabase
               .from('profiles')
@@ -223,15 +195,31 @@ export default function DeliveryDashboard() {
         const weekAgo = new Date(today);
         weekAgo.setDate(weekAgo.getDate() - 7);
 
-        const deliveryFee = 30; // Fixed delivery fee per order
+
         const todayEarnings = deliveredOrders
           .filter(o => new Date(o.created_at) >= today)
-          .length * deliveryFee;
+          .reduce((sum, o) => sum + (o.delivery_fee || settings.delivery_fee_per_order || 30), 0);
+
         const weekEarnings = deliveredOrders
           .filter(o => new Date(o.created_at) >= weekAgo)
-          .length * deliveryFee;
-        const totalEarnings = deliveredOrders.length * deliveryFee;
-        const pendingSettlement = Math.floor(totalEarnings * 0.2); // 20% pending
+          .reduce((sum, o) => sum + (o.delivery_fee || settings.delivery_fee_per_order || 30), 0);
+
+        const totalEarnings = deliveredOrders.reduce((sum, o) =>
+          sum + (o.delivery_fee || settings.delivery_fee_per_order || 30), 0);
+
+        // Fetch settlements
+        const { data: settlementsData } = await supabase
+          .from('settlements')
+          .select('amount')
+          .eq('delivery_partner_id', partnerData.id);
+
+        const totalSettled = settlementsData?.reduce((sum, s) => sum + Number(s.amount), 0) || 0;
+
+
+
+        // Revised Pending Calculation: Total Earnings - Total Settled + Incentives (if any)
+        // For now, let's keep incentives separate or just use Total Earnings - Settled
+        const pendingSettlement = totalEarnings - totalSettled;
 
         setEarnings({
           today: todayEarnings,
@@ -264,7 +252,44 @@ export default function DeliveryDashboard() {
 
     setLoading(false);
     setRefreshing(false);
-  };
+  }, [user?.id, settings.delivery_fee_per_order, settings.pending_settlement_percentage]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        navigate('/auth');
+        return;
+      }
+      fetchData();
+    }
+  }, [user?.id, authLoading, navigate, fetchData]);
+
+  // Real-time order updates
+  useEffect(() => {
+    if (!deliveryPartner) return;
+
+    const channel = supabase
+      .channel('delivery-orders')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders'
+        },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [deliveryPartner, fetchData]);
+
+  // Sound notifications for available orders
+  useDeliveryPartnerNotifications(deliveryPartner?.id, deliveryPartner?.is_available || false);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -276,7 +301,7 @@ export default function DeliveryDashboard() {
       toast.error('Please enter a valid phone number');
       return;
     }
-    
+
     // Generate OTP (demo mode - show in app)
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     setGeneratedOtp(otp);
@@ -310,7 +335,7 @@ export default function DeliveryDashboard() {
     } else {
       // Use secure RPC to assign delivery_partner role
       await supabase.rpc('request_delivery_partner_role');
-      
+
       setDeliveryPartner(data);
       setShowRegister(false);
       toast.success('Registered as delivery partner!');
@@ -334,18 +359,52 @@ export default function DeliveryDashboard() {
     }
   };
 
-  const verifyPickupAndAccept = async (order: OrderWithDetails) => {
+  // Step 1: Accept Order (Assign to partner)
+  const acceptOrder = async (orderId: string) => {
     if (!deliveryPartner) return;
-    
+
     // Check if partner already has an active order
     const { data: hasActive } = await supabase.rpc('partner_has_active_order');
     if (hasActive) {
       toast.error('Complete your current delivery first. One order at a time.');
       return;
     }
-    
+
+    try {
+      // Verify order is still available
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select('delivery_partner_id')
+        .eq('id', orderId)
+        .single();
+
+      if (orderData?.delivery_partner_id) {
+        toast.error('Order already taken by another partner');
+        fetchData();
+        return;
+      }
+
+      // Assign to me
+      const { error } = await supabase
+        .from('orders')
+        .update({ delivery_partner_id: deliveryPartner.id })
+        .eq('id', orderId)
+        .is('delivery_partner_id', null); // Concurrency check
+
+      if (error) throw error;
+
+      toast.success('Order accepted! Please proceed to pickup.');
+      fetchData();
+    } catch (error) {
+      console.error('Accept order error:', error);
+      toast.error('Failed to accept order');
+    }
+  };
+
+  // Step 2: Verify Pickup OTP (At shop)
+  const verifyPickupAndAccept = async (order: OrderWithDetails) => {
     const otpValue = pickupOtpInputs[order.id] || '';
-    
+
     // Use secure server-side RPC for OTP verification
     const { data, error } = await supabase.rpc('verify_pickup_and_accept_order', {
       _order_id: order.id,
@@ -353,12 +412,12 @@ export default function DeliveryDashboard() {
     });
 
     if (error) {
-      toast.error('Failed to accept order');
+      toast.error('Failed to verify pickup');
       return;
     }
-    
+
     if (data) {
-      toast.success('Order accepted!');
+      toast.success('Pickup verified! Start delivery.');
       setPickupOtpInputs(prev => ({ ...prev, [order.id]: '' }));
       setPickupOtpErrors(prev => ({ ...prev, [order.id]: false }));
       fetchData();
@@ -386,7 +445,7 @@ export default function DeliveryDashboard() {
 
   const verifyAndDeliver = async (order: OrderWithDetails) => {
     const otpValue = deliveryOtpInputs[order.id] || '';
-    
+
     // Use secure server-side RPC for OTP verification
     const { data, error } = await supabase.rpc('verify_delivery_and_complete', {
       _order_id: order.id,
@@ -397,7 +456,7 @@ export default function DeliveryDashboard() {
       toast.error('Failed to update status');
       return;
     }
-    
+
     if (data) {
       toast.success('Order delivered!');
       setDeliveryOtpInputs(prev => ({ ...prev, [order.id]: '' }));
@@ -528,7 +587,7 @@ export default function DeliveryDashboard() {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div className="flex items-center gap-2">
-                <Bike className="w-5 h-5 text-primary" />
+                <Bike className="w-5 h-5 text-primary hidden md:block" />
                 <div>
                   <h1 className="text-lg font-bold leading-tight">Delivery Dashboard</h1>
                   {profile?.full_name && (
@@ -661,7 +720,7 @@ export default function DeliveryDashboard() {
                         </div>
                       </div>
                       {currentOrder.customer_profile?.phone && (
-                        <a 
+                        <a
                           href={`tel:${currentOrder.customer_profile.phone}`}
                           className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg font-medium hover:bg-accent/90 transition-colors"
                         >
@@ -681,10 +740,10 @@ export default function DeliveryDashboard() {
                             {currentOrder.restaurants?.phone && (
                               <a href={`tel:${currentOrder.restaurants.phone}`} className="flex items-center gap-1 text-primary text-sm hover:underline">
                                 <Phone className="w-3 h-3" />
-                                Call Shop
+                                Call Shop ({currentOrder.restaurants.phone})
                               </a>
                             )}
-                            <a 
+                            <a
                               href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(currentOrder.restaurants?.address || '')}`}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -702,7 +761,7 @@ export default function DeliveryDashboard() {
                           <p className="text-sm text-muted-foreground">Deliver to</p>
                           <p className="font-medium">{currentOrder.delivery_address}</p>
                           <div className="flex items-center gap-3 mt-2">
-                            <a 
+                            <a
                               href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(currentOrder.delivery_address)}`}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -717,6 +776,68 @@ export default function DeliveryDashboard() {
                     </div>
 
                     <div className="space-y-3">
+                      {currentOrder.status === 'ready_for_pickup' && (
+                        <div className="space-y-3">
+                          <div className="p-3 bg-card rounded-lg border-2 border-accent/20">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Key className="w-4 h-4 text-accent" />
+                              <span className="text-sm font-medium">Enter Pickup OTP from Shop</span>
+                            </div>
+                            <Input
+                              type="text"
+                              placeholder="Enter 4-digit OTP"
+                              value={pickupOtpInputs[currentOrder.id] || ''}
+                              onChange={(e) => {
+                                setPickupOtpInputs(prev => ({ ...prev, [currentOrder.id]: e.target.value.replace(/\D/g, '').slice(0, 4) }));
+                                setPickupOtpErrors(prev => ({ ...prev, [currentOrder.id]: false }));
+                              }}
+                              className={`font-mono text-center text-lg tracking-widest ${pickupOtpErrors[currentOrder.id] ? 'border-destructive' : ''}`}
+                              maxLength={4}
+                            />
+                            {pickupOtpErrors[currentOrder.id] && (
+                              <div className="flex items-center gap-1 text-destructive text-sm mt-2">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Invalid OTP</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              className="flex-1"
+                              onClick={() => verifyPickupAndAccept(currentOrder)}
+                              disabled={(pickupOtpInputs[currentOrder.id] || '').length !== 4}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Verify & Pickup
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="icon">
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Release Order</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This order will be released back to the pool for another delivery partner to pick up.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => releaseOrderToPool(currentOrder.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Yes, Release
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                      )}
+
                       {currentOrder.status === 'on_the_way' && (
                         <div className="space-y-3">
                           <div className="p-3 bg-card rounded-lg border-2 border-primary/20">
@@ -743,9 +864,9 @@ export default function DeliveryDashboard() {
                             )}
                           </div>
                           <div className="flex gap-2">
-                            <Button 
-                              className="flex-1" 
-                              variant="success" 
+                            <Button
+                              className="flex-1"
+                              variant="success"
                               onClick={() => verifyAndDeliver(currentOrder)}
                               disabled={(deliveryOtpInputs[currentOrder.id] || '').length !== 4}
                             >
@@ -879,7 +1000,7 @@ export default function DeliveryDashboard() {
                               <span className="text-sm">{order.customer_profile?.full_name || 'Customer'}</span>
                             </div>
                             {order.customer_profile?.phone && (
-                              <a 
+                              <a
                                 href={`tel:${order.customer_profile.phone}`}
                                 className="flex items-center gap-1 text-primary text-xs hover:underline"
                               >
@@ -898,10 +1019,10 @@ export default function DeliveryDashboard() {
                                   {order.restaurants?.phone && (
                                     <a href={`tel:${order.restaurants.phone}`} className="flex items-center gap-1 text-primary text-xs hover:underline">
                                       <Phone className="w-3 h-3" />
-                                      Call Shop
+                                      Call Shop ({order.restaurants.phone})
                                     </a>
                                   )}
-                                  <a 
+                                  <a
                                     href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(order.restaurants?.address || '')}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
@@ -919,37 +1040,23 @@ export default function DeliveryDashboard() {
                             </div>
                           </div>
 
-                          {/* Pickup OTP verification */}
-                          <div className="space-y-3">
-                            <div className="p-3 bg-card rounded-lg border">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Key className="w-4 h-4 text-accent" />
-                                <span className="text-sm font-medium">Enter Pickup OTP from Shop</span>
-                              </div>
-                              <Input
-                                type="text"
-                                placeholder="Enter 4-digit OTP"
-                                value={pickupOtpInputs[order.id] || ''}
-                                onChange={(e) => {
-                                  setPickupOtpInputs(prev => ({ ...prev, [order.id]: e.target.value.replace(/\D/g, '').slice(0, 4) }));
-                                  setPickupOtpErrors(prev => ({ ...prev, [order.id]: false }));
-                                }}
-                                className={`font-mono text-center text-lg tracking-widest ${pickupOtpErrors[order.id] ? 'border-destructive' : ''}`}
-                                maxLength={4}
-                              />
-                              {pickupOtpErrors[order.id] && (
-                                <div className="flex items-center gap-1 text-destructive text-sm mt-2">
-                                  <AlertCircle className="w-3 h-3" />
-                                  <span>Invalid OTP</span>
-                                </div>
-                              )}
-                            </div>
-                            <Button 
-                              className="w-full" 
-                              onClick={() => verifyPickupAndAccept(order)}
-                              disabled={(pickupOtpInputs[order.id] || '').length !== 4}
+                          {/* Accept/Reject Actions */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                // For now rejection just does nothing or could hide it locally
+                                toast.info('Order passed');
+                              }}
                             >
-                              Verify & Accept Order
+                              <X className="w-4 h-4 mr-2" />
+                              Pass
+                            </Button>
+                            <Button
+                              onClick={() => acceptOrder(order.id)}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Accept Order
                             </Button>
                           </div>
                         </CardContent>
@@ -1096,7 +1203,7 @@ export default function DeliveryDashboard() {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center p-3 bg-card rounded-lg">
                     <span className="text-muted-foreground">Delivery fee per order</span>
-                    <span className="font-bold">₹30</span>
+                    <span className="font-bold">₹{settings.delivery_fee_per_order ?? 30}</span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-card rounded-lg">
                     <span className="text-muted-foreground">Total deliveries</span>
@@ -1114,7 +1221,7 @@ export default function DeliveryDashboard() {
                     <span className="text-muted-foreground">Next payout</span>
                     <span className="font-bold">₹{earnings.pending}</span>
                   </div>
-                  
+
                   {/* Payment breakdown */}
                   <div className="mt-4 p-4 bg-secondary/50 rounded-lg">
                     <h4 className="font-semibold mb-3 flex items-center gap-2">
@@ -1126,22 +1233,14 @@ export default function DeliveryDashboard() {
                         <span className="text-muted-foreground">Gross earnings</span>
                         <span>₹{earnings.total}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Platform fee (0%)</span>
-                        <span>₹0</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Incentives & bonuses</span>
-                        <span className="text-accent">+₹{Math.floor(orderHistory.filter(o => o.status === 'delivered').length * 5)}</span>
-                      </div>
                       <div className="border-t border-border my-2" />
                       <div className="flex justify-between font-bold">
                         <span>Net payout</span>
-                        <span className="text-primary">₹{earnings.total + Math.floor(orderHistory.filter(o => o.status === 'delivered').length * 5)}</span>
+                        <span className="text-primary">₹{earnings.total}</span>
                       </div>
                     </div>
                   </div>
-                  
+
                   <p className="text-sm text-muted-foreground text-center mt-4">
                     Settlements are processed every Monday to your registered bank account
                   </p>
@@ -1221,7 +1320,7 @@ export default function DeliveryDashboard() {
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <Percent className="w-4 h-4 text-accent" />
                       <span className="text-2xl font-bold text-accent">
-                        {orderHistory.length > 0 
+                        {orderHistory.length > 0
                           ? Math.round((orderHistory.filter(o => o.status === 'delivered').length / orderHistory.length) * 100)
                           : 0}%
                       </span>
@@ -1247,7 +1346,7 @@ export default function DeliveryDashboard() {
                     </p>
                   </div>
                 </div>
-                
+
                 {/* Rating Progress */}
                 <div className="p-3 bg-gradient-to-r from-primary/10 to-accent/10 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
@@ -1256,12 +1355,12 @@ export default function DeliveryDashboard() {
                       Partner Level
                     </span>
                     <span className="text-sm text-primary font-bold">
-                      {orderHistory.filter(o => o.status === 'delivered').length >= 100 ? 'Gold' : 
-                       orderHistory.filter(o => o.status === 'delivered').length >= 50 ? 'Silver' : 'Bronze'}
+                      {orderHistory.filter(o => o.status === 'delivered').length >= 100 ? 'Gold' :
+                        orderHistory.filter(o => o.status === 'delivered').length >= 50 ? 'Silver' : 'Bronze'}
                     </span>
                   </div>
                   <div className="w-full bg-secondary rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-gradient-to-r from-primary to-accent h-2 rounded-full transition-all"
                       style={{ width: `${Math.min(100, (orderHistory.filter(o => o.status === 'delivered').length / 100) * 100)}%` }}
                     />
@@ -1270,14 +1369,14 @@ export default function DeliveryDashboard() {
                     {100 - orderHistory.filter(o => o.status === 'delivered').length} more deliveries to reach Gold
                   </p>
                 </div>
-                
+
                 <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
                   <span className="text-muted-foreground flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
                     Member Since
                   </span>
                   <span className="font-medium">
-                    {deliveryPartner?.created_at 
+                    {deliveryPartner?.created_at
                       ? format(new Date(deliveryPartner.created_at), 'MMM d, yyyy')
                       : 'N/A'}
                   </span>

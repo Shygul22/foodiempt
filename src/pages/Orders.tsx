@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef } from 'react';
+import React, { useState, useEffect, forwardRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Textarea } from '@/components/ui/textarea';
-import { 
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -74,42 +74,33 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
   const [feedback, setFeedback] = useState('');
   const [submittingRating, setSubmittingRating] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/auth');
-      return;
-    }
-    if (user) {
-      fetchOrders();
-      fetchRatings();
-      const cleanup = subscribeToOrders();
-      return cleanup;
-    }
-  }, [user, authLoading]);
 
-  const fetchOrders = async () => {
+
+  const fetchOrders = useCallback(async () => {
+    if (!user) return;
     const { data, error } = await supabase
       .from('orders')
       .select('*, restaurants(name, phone)')
-      .eq('customer_id', user!.id)
+      .eq('customer_id', user.id)
       .order('created_at', { ascending: false });
 
     if (!error && data) {
       setOrders(data);
     }
     setLoading(false);
-  };
+  }, [user]);
 
-  const fetchRatings = async () => {
+  const fetchRatings = useCallback(async () => {
+    if (!user) return;
     const { data } = await supabase
       .from('order_ratings')
       .select('order_id, rating')
-      .eq('customer_id', user!.id);
+      .eq('customer_id', user.id);
 
     if (data) {
       setRatings(data);
     }
-  };
+  }, [user]);
 
   const hasRated = (orderId: string) => {
     return ratings.some(r => r.order_id === orderId);
@@ -151,7 +142,8 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
     setSubmittingRating(false);
   };
 
-  const subscribeToOrders = () => {
+  const subscribeToOrders = useCallback(() => {
+    if (!user) return () => { };
     const channel = supabase
       .channel('customer-orders')
       .on(
@@ -160,7 +152,7 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
           event: '*',
           schema: 'public',
           table: 'orders',
-          filter: `customer_id=eq.${user!.id}`,
+          filter: `customer_id=eq.${user.id}`,
         },
         () => {
           fetchOrders();
@@ -171,7 +163,20 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  };
+  }, [user, fetchOrders]);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+      return;
+    }
+    if (user) {
+      fetchOrders();
+      fetchRatings();
+      const cleanup = subscribeToOrders();
+      return cleanup;
+    }
+  }, [user, authLoading, navigate, fetchOrders, fetchRatings, subscribeToOrders]);
 
   const cancelOrder = async (orderId: string) => {
     setCancellingId(orderId);
@@ -265,16 +270,14 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
                         <div className="flex items-center justify-between overflow-x-auto gap-1">
                           {orderSteps.slice(0, 7).map((step, index) => (
                             <div key={step.status} className="flex flex-col items-center min-w-[50px]">
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                                index <= currentStep 
-                                  ? 'bg-primary text-primary-foreground' 
-                                  : 'bg-muted text-muted-foreground'
-                              }`}>
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${index <= currentStep
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground'
+                                }`}>
                                 {index + 1}
                               </div>
-                              <span className={`text-[10px] mt-1 text-center ${
-                                index <= currentStep ? 'text-primary font-medium' : 'text-muted-foreground'
-                              }`}>
+                              <span className={`text-[10px] mt-1 text-center ${index <= currentStep ? 'text-primary font-medium' : 'text-muted-foreground'
+                                }`}>
                                 {step.label}
                               </span>
                             </div>
@@ -287,7 +290,7 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
                     {order.restaurants?.phone && isActive && (
                       <div className="flex items-center justify-between p-2 bg-primary/5 rounded-lg mb-3">
                         <span className="text-sm text-muted-foreground">Contact Shop</span>
-                        <a 
+                        <a
                           href={`tel:${order.restaurants.phone}`}
                           className="flex items-center gap-1 text-primary text-sm font-medium hover:underline"
                         >
@@ -340,8 +343,8 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
                       <div className="mt-4 pt-3 border-t border-border">
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
                               disabled={cancellingId === order.id}
                             >
@@ -358,7 +361,7 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Keep Order</AlertDialogCancel>
-                              <AlertDialogAction 
+                              <AlertDialogAction
                                 onClick={() => cancelOrder(order.id)}
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               >
@@ -380,11 +383,10 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
                               {[1, 2, 3, 4, 5].map((star) => (
                                 <Star
                                   key={star}
-                                  className={`w-4 h-4 ${
-                                    star <= getOrderRating(order.id)
-                                      ? 'fill-yellow-400 text-yellow-400'
-                                      : 'text-muted-foreground'
-                                  }`}
+                                  className={`w-4 h-4 ${star <= getOrderRating(order.id)
+                                    ? 'fill-yellow-400 text-yellow-400'
+                                    : 'text-muted-foreground'
+                                    }`}
                                 />
                               ))}
                             </div>
@@ -441,11 +443,10 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
                   className="p-1 transition-transform hover:scale-110"
                 >
                   <Star
-                    className={`w-10 h-10 ${
-                      star <= selectedRating
-                        ? 'fill-yellow-400 text-yellow-400'
-                        : 'text-muted-foreground hover:text-yellow-300'
-                    }`}
+                    className={`w-10 h-10 ${star <= selectedRating
+                      ? 'fill-yellow-400 text-yellow-400'
+                      : 'text-muted-foreground hover:text-yellow-300'
+                      }`}
                   />
                 </button>
               ))}

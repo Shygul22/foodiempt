@@ -49,10 +49,12 @@ import {
   Search,
   Phone,
   IndianRupee,
-  Filter
+  Filter,
+  Settings
 } from 'lucide-react';
 import { PromotionsManager } from '@/components/admin/PromotionsManager';
 import { CouponsManager } from '@/components/admin/CouponsManager';
+import { SettlementsManager } from '@/components/admin/SettlementsManager';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -101,9 +103,12 @@ export default function AdminDashboard() {
   const [searchOrders, setSearchOrders] = useState('');
   const [searchUsers, setSearchUsers] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
+  const [enablePhoneLogin, setEnablePhoneLogin] = useState(true);
+  const [deliveryFee, setDeliveryFee] = useState('30');
+  const [settlementPercent, setSettlementPercent] = useState('20');
 
   const fetchData = useCallback(async () => {
-    const [restaurantsRes, ordersRes, partnersRes, profilesRes] = await Promise.all([
+    const [restaurantsRes, ordersRes, partnersRes, profilesRes, settingsRes] = await Promise.all([
       supabase.from('restaurants').select('*').order('created_at', { ascending: false }),
       supabase
         .from('orders')
@@ -112,9 +117,11 @@ export default function AdminDashboard() {
         .limit(100),
       supabase.from('delivery_partners').select('*'),
       supabase.from('profiles').select('id, email, full_name').order('created_at', { ascending: false }).limit(100),
+      supabase.from('app_settings').select('*'),
     ]);
 
     if (restaurantsRes.data) {
+      // ... (existing stats logic)
       setRestaurants(restaurantsRes.data);
       setStats((prev) => ({
         ...prev,
@@ -178,9 +185,34 @@ export default function AdminDashboard() {
       }));
     }
 
+    if (settingsRes.data) {
+      settingsRes.data.forEach(setting => {
+        if (setting.key === 'enable_phone_login') {
+          setEnablePhoneLogin(setting.value as boolean);
+        } else if (setting.key === 'delivery_fee_per_order') {
+          setDeliveryFee(String(setting.value));
+        } else if (setting.key === 'pending_settlement_percentage') {
+          setSettlementPercent(String(setting.value));
+        }
+      });
+    }
+
     setLoading(false);
     setRefreshing(false);
   }, []);
+
+  const subscribeToChanges = useCallback(() => {
+    const channel = supabase
+      .channel('admin-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_partners' }, fetchData)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchData]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -192,7 +224,7 @@ export default function AdminDashboard() {
       fetchData();
       subscribeToChanges();
     }
-  }, [user, authLoading, hasRole, fetchData]);
+  }, [user, authLoading, hasRole, fetchData, subscribeToChanges, navigate]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -217,18 +249,7 @@ export default function AdminDashboard() {
     u.email.toLowerCase().includes(searchUsers.toLowerCase())
   );
 
-  const subscribeToChanges = () => {
-    const channel = supabase
-      .channel('admin-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants' }, fetchData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_partners' }, fetchData)
-      .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  };
 
   const toggleVerification = async (restaurantId: string, isVerified: boolean) => {
     const { error } = await supabase
@@ -323,6 +344,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const updateSetting = async (key: string, value: any) => {
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key, value });
+
+    if (error) {
+      toast.error('Failed to update settings');
+    } else {
+      if (key === 'enable_phone_login') setEnablePhoneLogin(value);
+      toast.success('Settings updated');
+      fetchData(); // Refresh to ensure sync
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -342,7 +377,7 @@ export default function AdminDashboard() {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 hidden md:flex items-center justify-center shadow-lg">
                   <Shield className="w-5 h-5 text-primary-foreground" />
                 </div>
                 <div>
@@ -507,6 +542,14 @@ export default function AdminDashboard() {
             <TabsTrigger value="coupons" className="gap-1 text-xs">
               <Tag className="w-4 h-4" />
               <span className="hidden sm:inline">Coupons</span>
+            </TabsTrigger>
+            <TabsTrigger value="settlements" className="gap-1 text-xs">
+              <DollarSign className="w-4 h-4" />
+              <span className="hidden sm:inline">Settlements</span>
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-1 text-xs">
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>
           </TabsList>
 
@@ -700,7 +743,6 @@ export default function AdminDashboard() {
                   {deliveryPartners.map((partner) => (
                     <div
                       key={partner.id}
-                      key={partner.id}
                       className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
                     >
                       <div className="flex items-start gap-3">
@@ -843,6 +885,82 @@ export default function AdminDashboard() {
 
           <TabsContent value="coupons">
             <CouponsManager />
+          </TabsContent>
+
+          <TabsContent value="settlements">
+            <SettlementsManager />
+          </TabsContent>
+          <TabsContent value="settings">
+            <Card className="border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Settings className="w-5 h-5 text-primary" />
+                  System Settings
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between p-4 border rounded-xl bg-card">
+                  <div className="space-y-0.5">
+                    <h4 className="font-semibold text-base">Phone Login</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Enable or disable phone number authentication.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={enablePhoneLogin}
+                    onCheckedChange={(checked) => updateSetting('enable_phone_login', checked)}
+                  />
+                </div>
+
+                <div className="p-4 border rounded-xl bg-card space-y-4">
+                  <h4 className="font-semibold text-base">Settlement Configuration</h4>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Delivery Fee per Order (₹)</label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          value={deliveryFee}
+                          onChange={(e) => setDeliveryFee(e.target.value)}
+                          placeholder="30"
+                        />
+                        <Button
+                          variant="secondary"
+                          onClick={() => updateSetting('delivery_fee_per_order', Number(deliveryFee))}
+                        >
+                          Save
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Amount paid to partner per delivery.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Pending Settlement (%)</label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          value={settlementPercent}
+                          onChange={(e) => setSettlementPercent(e.target.value)}
+                          placeholder="20"
+                        />
+                        <Button
+                          variant="secondary"
+                          onClick={() => updateSetting('pending_settlement_percentage', Number(settlementPercent))}
+                        >
+                          Save
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Percentage of earnings held for later settlement.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

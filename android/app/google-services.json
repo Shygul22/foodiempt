@@ -1,0 +1,29 @@
+{
+    "project_info": {
+        "project_number": "27091407196",
+        "project_id": "zenjourneyin",
+        "storage_bucket": "zenjourneyin.firebasestorage.app"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:27091407196:android:0e4f132b17d64bcf6a3199",
+                "android_client_info": {
+                    "package_name": "com.zenjourney.foodie"
+                }
+            },
+            "oauth_client": [],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyA2wC71JVlZrmiydY-Ia7gSOAAQMkN87Wc"
+                }
+            ],
+            "services": {
+                "appinvite_service": {
+                    "other_platform_oauth_client": []
+                }
+            }
+        }
+    ],
+    "configuration_version": "1"
+}

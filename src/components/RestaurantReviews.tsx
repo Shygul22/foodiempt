@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Star, User, MessageSquare } from 'lucide-react';
@@ -21,11 +21,7 @@ export function RestaurantReviews({ restaurantId }: RestaurantReviewsProps) {
   const [stats, setStats] = useState({ average: 0, count: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchReviews();
-  }, [restaurantId]);
-
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     const { data, error } = await supabase
       .from('restaurant_reviews')
       .select('*')
@@ -43,7 +39,11 @@ export function RestaurantReviews({ restaurantId }: RestaurantReviewsProps) {
       }
     }
     setLoading(false);
-  };
+  }, [restaurantId]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews, restaurantId]);
 
   if (loading) {
     return (
@@ -100,11 +100,10 @@ export function RestaurantReviews({ restaurantId }: RestaurantReviewsProps) {
                         {[1, 2, 3, 4, 5].map((star) => (
                           <Star
                             key={star}
-                            className={`w-4 h-4 ${
-                              star <= review.rating
-                                ? 'fill-status-pending text-status-pending'
-                                : 'text-muted-foreground/30'
-                            }`}
+                            className={`w-4 h-4 ${star <= review.rating
+                              ? 'fill-status-pending text-status-pending'
+                              : 'text-muted-foreground/30'
+                              }`}
                           />
                         ))}
                       </div>

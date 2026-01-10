@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -106,26 +106,7 @@ export default function RestaurantDashboard() {
     image_url: '',
   });
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
-      fetchData();
-    }
-  }, [user, authLoading]);
-
-  useEffect(() => {
-    if (restaurant?.id) {
-      subscribeToOrders();
-    }
-  }, [restaurant?.id]);
-
-  // Sound notifications for new orders
-  useRestaurantOrderNotifications(restaurant?.id);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     // Fetch restaurant owned by user
     const { data: restaurantData } = await supabase
       .from('restaurants')
@@ -242,25 +223,9 @@ export default function RestaurantDashboard() {
 
     setLoading(false);
     setRefreshing(false);
-  };
+  }, [user]);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchData();
-  };
-
-  // Filtered data
-  const filteredOrders = orders.filter(o =>
-    o.id.toLowerCase().includes(searchOrders.toLowerCase()) ||
-    (o.customer_profile?.full_name?.toLowerCase().includes(searchOrders.toLowerCase()))
-  );
-
-  const filteredMenuItems = menuItems.filter(item =>
-    item.name.toLowerCase().includes(searchMenu.toLowerCase()) ||
-    (item.category?.toLowerCase().includes(searchMenu.toLowerCase()))
-  );
-
-  const subscribeToOrders = () => {
+  const subscribeToOrders = useCallback(() => {
     const channel = supabase
       .channel('restaurant-orders')
       .on(
@@ -279,7 +244,46 @@ export default function RestaurantDashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [fetchData]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        navigate('/auth');
+        return;
+      }
+      fetchData();
+    }
+  }, [user, authLoading, navigate, fetchData]);
+
+  useEffect(() => {
+    if (restaurant?.id) {
+      subscribeToOrders();
+    }
+  }, [restaurant?.id, subscribeToOrders]);
+
+  // Sound notifications for new orders
+  useRestaurantOrderNotifications(restaurant?.id);
+
+
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchData();
   };
+
+  // Filtered data
+  const filteredOrders = orders.filter(o =>
+    o.id.toLowerCase().includes(searchOrders.toLowerCase()) ||
+    (o.customer_profile?.full_name?.toLowerCase().includes(searchOrders.toLowerCase()))
+  );
+
+  const filteredMenuItems = menuItems.filter(item =>
+    item.name.toLowerCase().includes(searchMenu.toLowerCase()) ||
+    (item.category?.toLowerCase().includes(searchMenu.toLowerCase()))
+  );
+
+
 
   const createRestaurant = async () => {
     if (!restaurantForm.name || !restaurantForm.address) {
@@ -635,7 +639,7 @@ export default function RestaurantDashboard() {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div className="flex items-center gap-2">
-                <Store className="w-5 h-5 text-primary" />
+                <Store className="w-5 h-5 text-primary hidden md:block" />
                 <h1 className="text-xl font-bold">{restaurant?.name}</h1>
               </div>
             </div>

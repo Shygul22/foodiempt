@@ -1,5 +1,7 @@
-import { useState, useEffect, forwardRef } from 'react';
+import { useState, useEffect, forwardRef, useCallback } from 'react';
 import { Heart } from 'lucide-react';
+import { useHaptics } from '@/hooks/useHaptics';
+import { ImpactStyle } from '@capacitor/haptics';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -17,23 +19,24 @@ export const FavouriteButton = forwardRef<HTMLButtonElement, FavouriteButtonProp
     const { user } = useAuth();
     const [isFavourite, setIsFavourite] = useState(false);
     const [loading, setLoading] = useState(false);
+    const haptics = useHaptics();
 
-    useEffect(() => {
-      if (user) {
-        checkFavourite();
-      }
-    }, [user, restaurantId]);
-
-    const checkFavourite = async () => {
+    const checkFavourite = useCallback(async () => {
       const { data } = await supabase
         .from('favourite_shops')
         .select('id')
         .eq('user_id', user!.id)
         .eq('restaurant_id', restaurantId)
         .maybeSingle();
-      
+
       setIsFavourite(!!data);
-    };
+    }, [user, restaurantId]);
+
+    useEffect(() => {
+      if (user) {
+        checkFavourite();
+      }
+    }, [user, restaurantId, checkFavourite]);
 
     const toggleFavourite = async (e: React.MouseEvent) => {
       e.preventDefault();
@@ -52,8 +55,9 @@ export const FavouriteButton = forwardRef<HTMLButtonElement, FavouriteButtonProp
             .delete()
             .eq('user_id', user.id)
             .eq('restaurant_id', restaurantId);
-          
+
           setIsFavourite(false);
+          haptics.impact(ImpactStyle.Light);
           toast.success('Removed from favourites');
         } else {
           await supabase
@@ -62,8 +66,9 @@ export const FavouriteButton = forwardRef<HTMLButtonElement, FavouriteButtonProp
               user_id: user.id,
               restaurant_id: restaurantId,
             });
-          
+
           setIsFavourite(true);
+          haptics.impact(ImpactStyle.Medium);
           toast.success('Added to favourites');
         }
       } catch (error) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ReviewForm } from '@/components/ReviewForm';
-import { 
-  ArrowLeft, 
-  Package, 
-  Clock, 
-  MapPin, 
-  Phone, 
+import {
+  ArrowLeft,
+  Package,
+  Clock,
+  MapPin,
+  Phone,
   Key,
   Navigation,
   Bike,
@@ -25,8 +25,8 @@ import { toast } from 'sonner';
 import { useCustomerOrderNotifications } from '@/hooks/useOrderNotifications';
 
 interface OrderWithDetails extends Order {
-  restaurants: { 
-    name: string; 
+  restaurants: {
+    name: string;
     phone: string | null;
     lat: number | null;
     lng: number | null;
@@ -62,22 +62,12 @@ export default function OrderTracking() {
   const [hasReviewed, setHasReviewed] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/auth');
-      return;
-    }
-    if (user && orderId) {
-      fetchOrder();
-      const cleanup = subscribeToUpdates();
-      return cleanup;
-    }
-  }, [user, authLoading, orderId]);
+
 
   // Sound notifications for order status changes
   useCustomerOrderNotifications(orderId);
 
-  const fetchOrder = async () => {
+  const fetchOrder = useCallback(async () => {
     const { data, error } = await supabase
       .from('orders')
       .select('*, restaurants(name, phone, lat, lng, address)')
@@ -116,9 +106,9 @@ export default function OrderTracking() {
     }
 
     setLoading(false);
-  };
+  }, [orderId, user, navigate]);
 
-  const subscribeToUpdates = () => {
+  const subscribeToUpdates = useCallback(() => {
     const channel = supabase
       .channel(`order-${orderId}`)
       .on(
@@ -151,7 +141,19 @@ export default function OrderTracking() {
     return () => {
       supabase.removeChannel(channel);
     };
-  };
+  }, [orderId, fetchOrder, order?.delivery_partner_id]);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+      return;
+    }
+    if (user && orderId) {
+      fetchOrder();
+      const cleanup = subscribeToUpdates();
+      return cleanup;
+    }
+  }, [user, authLoading, orderId, navigate, fetchOrder, subscribeToUpdates]);
 
   if (authLoading || loading) {
     return (
@@ -197,7 +199,7 @@ export default function OrderTracking() {
               <StatusBadge status={order.status as OrderStatus} />
             </div>
           </div>
-          
+
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Clock className="w-4 h-4" />
@@ -220,23 +222,22 @@ export default function OrderTracking() {
               <div className="relative">
                 {/* Progress Line */}
                 <div className="absolute left-[19px] top-0 bottom-0 w-0.5 bg-border" />
-                <div 
+                <div
                   className="absolute left-[19px] top-0 w-0.5 bg-primary transition-all duration-500"
                   style={{ height: `${(currentStep / (orderSteps.length - 1)) * 100}%` }}
                 />
-                
+
                 <div className="space-y-4">
                   {orderSteps.map((step, index) => {
                     const isCompleted = index <= currentStep;
                     const isCurrent = index === currentStep;
-                    
+
                     return (
                       <div key={step.status} className="flex items-center gap-4 relative">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-all ${
-                          isCompleted 
-                            ? 'bg-primary text-primary-foreground' 
-                            : 'bg-muted text-muted-foreground'
-                        } ${isCurrent ? 'ring-4 ring-primary/20 animate-pulse-soft' : ''}`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-all ${isCompleted
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground'
+                          } ${isCurrent ? 'ring-4 ring-primary/20 animate-pulse-soft' : ''}`}>
                           {step.icon}
                         </div>
                         <div className="flex-1">

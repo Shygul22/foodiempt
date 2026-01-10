@@ -1,4 +1,4 @@
-project_id = "mchzexkrbgwwohydkihi"
+project_id = "mchzexkrbgwwohydkxih"
 
 [functions.recommend-restaurants]
 verify_jwt = false

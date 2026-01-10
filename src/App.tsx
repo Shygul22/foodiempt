@@ -29,6 +29,8 @@ import { Capacitor } from "@capacitor/core";
 
 const queryClient = new QueryClient();
 
+import ErrorBoundary from "@/components/ErrorBoundary";
+
 const App = () => {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -42,35 +44,37 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
-            <Routes>
-              {/* Public/Auth routes */}
-              <Route path="/auth" element={<Auth />} />
+          <ErrorBoundary>
+            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+              <Routes>
+                {/* Public/Auth routes */}
+                <Route path="/auth" element={<Auth />} />
 
-              {/* Admin/Dashboard routes */}
-              <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/restaurant" element={<RestaurantDashboard />} />
-              <Route path="/delivery" element={<DeliveryDashboard />} />
+                {/* Admin/Dashboard routes */}
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/restaurant" element={<RestaurantDashboard />} />
+                <Route path="/delivery" element={<DeliveryDashboard />} />
 
-              {/* Main App Layout for Consumer Routes */}
-              <Route element={<MainLayout />}>
-                <Route path="/" element={<Index />} />
-                <Route path="/restaurant/:id" element={<RestaurantDetail />} />
-                <Route path="/cart" element={<Cart />} />
-                <Route path="/orders" element={<Orders />} />
-                <Route path="/order/:orderId" element={<OrderTracking />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/terms" element={<Terms />} />
-                <Route path="/privacy" element={<Privacy />} />
-                <Route path="/refund" element={<Refund />} />
-                <Route path="/offers" element={<Offers />} />
-                <Route path="/refer" element={<Refer />} />
-                <Route path="/promotions" element={<Promotions />} />
-                <Route path="/contact" element={<Contact />} />
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
+                {/* Main App Layout for Consumer Routes */}
+                <Route element={<MainLayout />}>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/restaurant/:id" element={<RestaurantDetail />} />
+                  <Route path="/cart" element={<Cart />} />
+                  <Route path="/orders" element={<Orders />} />
+                  <Route path="/order/:orderId" element={<OrderTracking />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/refund" element={<Refund />} />
+                  <Route path="/offers" element={<Offers />} />
+                  <Route path="/refer" element={<Refer />} />
+                  <Route path="/promotions" element={<Promotions />} />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </ErrorBoundary>
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>

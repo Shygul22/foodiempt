@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef } from 'react';
+import React, { useState, useEffect, forwardRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -7,13 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { 
-  ArrowLeft, 
-  User, 
-  Phone, 
-  Mail, 
-  MapPin, 
-  Package, 
+import {
+  ArrowLeft,
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  Package,
   Heart,
   Settings,
   LogOut,
@@ -21,6 +21,8 @@ import {
   Gift,
   Users,
   Shield,
+  Store,
+  Bike,
   ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -33,7 +35,7 @@ interface Profile {
 }
 
 const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
-  const { user, signOut, loading: authLoading } = useAuth();
+  const { user, signOut, loading: authLoading, hasRole } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,22 +43,13 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
   const [formData, setFormData] = useState({ full_name: '', phone: '' });
   const [stats, setStats] = useState({ orders: 0, favourites: 0 });
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
-      fetchProfile();
-    }
-  }, [user, authLoading]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
+      if (!user) return;
       const [profileRes, ordersRes, favRes] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user!.id).maybeSingle(),
-        supabase.from('orders').select('id').eq('customer_id', user!.id),
-        supabase.from('favourite_shops').select('id').eq('user_id', user!.id)
+        supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+        supabase.from('orders').select('id').eq('customer_id', user.id),
+        supabase.from('favourite_shops').select('id').eq('user_id', user.id)
       ]);
 
       if (profileRes.data) {
@@ -75,7 +68,17 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
       console.error('Error fetching profile:', error);
     }
     setLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        navigate('/auth');
+        return;
+      }
+      fetchProfile();
+    }
+  }, [user, authLoading, navigate, fetchProfile]);
 
   const handleUpdateProfile = async () => {
     const { error } = await supabase
@@ -200,12 +203,11 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
         <Card className="border-0 shadow-lg">
           <CardContent className="p-0">
             {menuItems.map((item, index) => (
-              <Link 
-                key={item.label} 
+              <Link
+                key={item.label}
                 to={item.href}
-                className={`flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors ${
-                  index !== menuItems.length - 1 ? 'border-b border-border' : ''
-                }`}
+                className={`flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors ${index !== menuItems.length - 1 ? 'border-b border-border' : ''
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <item.icon className="w-5 h-5 text-primary" />
@@ -217,6 +219,53 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
           </CardContent>
         </Card>
 
+        {/* Dashboards Section - conditionally rendered based on roles */}
+        {(hasRole('super_admin') || hasRole('restaurant_owner') || hasRole('delivery_partner')) && (
+          <Card className="border-0 shadow-lg">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground">Dashboards</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {hasRole('super_admin') && (
+                <Link
+                  to="/admin"
+                  className="flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors border-b border-border"
+                >
+                  <div className="flex items-center gap-3">
+                    <Shield className="w-5 h-5 text-primary" />
+                    <span className="font-medium">Admin Dashboard</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </Link>
+              )}
+              {hasRole('restaurant_owner') && (
+                <Link
+                  to="/restaurant"
+                  className="flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors border-b border-border"
+                >
+                  <div className="flex items-center gap-3">
+                    <Store className="w-5 h-5 text-accent" />
+                    <span className="font-medium">Restaurant Dashboard</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </Link>
+              )}
+              {hasRole('delivery_partner') && (
+                <Link
+                  to="/delivery"
+                  className="flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Bike className="w-5 h-5 text-primary" />
+                    <span className="font-medium">Delivery Dashboard</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </Link>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Policy Items */}
         <Card className="border-0 shadow-lg">
           <CardHeader className="pb-2">
@@ -224,12 +273,11 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
           </CardHeader>
           <CardContent className="p-0">
             {policyItems.map((item, index) => (
-              <Link 
-                key={item.label} 
+              <Link
+                key={item.label}
                 to={item.href}
-                className={`flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors ${
-                  index !== policyItems.length - 1 ? 'border-b border-border' : ''
-                }`}
+                className={`flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors ${index !== policyItems.length - 1 ? 'border-b border-border' : ''
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <item.icon className="w-5 h-5 text-muted-foreground" />
@@ -242,8 +290,8 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
         </Card>
 
         {/* Sign Out */}
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="w-full text-destructive border-destructive/20 hover:bg-destructive/10"
           onClick={handleSignOut}
         >

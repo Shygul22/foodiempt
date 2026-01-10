@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef } from 'react';
+import React, { useState, useEffect, forwardRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -51,8 +51,7 @@ interface AppliedCoupon {
 const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { items, restaurantId, updateQuantity, removeItem, clearCart, getTotalAmount } = useCartStore();
-  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const { items, restaurantId, updateQuantity, removeItem, clearCart, getTotalAmount, deliveryAddress, setDeliveryAddress } = useCartStore();
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
   const [isScheduled, setIsScheduled] = useState(false);
@@ -70,6 +69,37 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [userPhone, setUserPhone] = useState<string | null>(null);
 
+
+
+  const fetchRestaurant = useCallback(async () => {
+    if (!restaurantId) return;
+
+    const { data } = await supabase
+      .from('restaurants')
+      .select('name, address')
+      .eq('id', restaurantId)
+      .single();
+
+    if (data) {
+      setRestaurant(data);
+    }
+  }, [restaurantId]);
+
+  const fetchUserPhone = useCallback(async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('profiles')
+      .select('phone')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (data?.phone) {
+      setUserPhone(data.phone);
+      setPhoneNumber(data.phone);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (restaurantId) {
       fetchRestaurant();
@@ -77,32 +107,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
     if (user) {
       fetchUserPhone();
     }
-  }, [restaurantId, user]);
-
-  const fetchRestaurant = async () => {
-    const { data } = await supabase
-      .from('restaurants')
-      .select('name, address')
-      .eq('id', restaurantId!)
-      .single();
-
-    if (data) {
-      setRestaurant(data);
-    }
-  };
-
-  const fetchUserPhone = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('phone')
-      .eq('id', user!.id)
-      .maybeSingle();
-
-    if (data?.phone) {
-      setUserPhone(data.phone);
-      setPhoneNumber(data.phone);
-    }
-  };
+  }, [restaurantId, user, fetchRestaurant, fetchUserPhone]);
 
   // Fixed delivery fee
   const deliveryFee = 25;

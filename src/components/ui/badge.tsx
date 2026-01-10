@@ -20,7 +20,7 @@ const badgeVariants = cva(
   },
 );
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
+export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> { }
 
 const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
   ({ className, variant, ...props }, ref) => {
@@ -29,4 +29,5 @@ const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
 );
 Badge.displayName = "Badge";
 
+// eslint-disable-next-line react-refresh/only-export-components
 export { Badge, badgeVariants };

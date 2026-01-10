@@ -37,6 +37,8 @@ export interface Restaurant {
   is_verified: boolean;
   is_open: boolean;
   commission_rate: number;
+  rating: number | null;
+  estimated_delivery_time: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -122,4 +124,22 @@ export interface FavouriteShop {
   user_id: string;
   restaurant_id: string;
   created_at: string;
+}
+
+export interface AppSettings {
+  key: string;
+  value: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Settlement {
+  id: string;
+  delivery_partner_id: string;
+  amount: number;
+  status: 'pending' | 'processed' | 'failed';
+  reference_no: string | null;
+  processed_at: string | null;
+  created_at: string;
+  profiles?: Profile;
 }

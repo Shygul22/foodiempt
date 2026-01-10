@@ -1119,3 +1119,52 @@ CREATE POLICY "Admins can manage all reviews"
 ON public.restaurant_reviews
 FOR ALL
 USING (has_role(auth.uid(), 'super_admin'));
+
+-- Create reviews table
+CREATE TABLE IF NOT EXISTS public.reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID REFERENCES public.orders(id),
+  restaurant_id UUID NOT NULL REFERENCES public.restaurants(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Enable RLS on reviews
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+
+-- Reviews policies
+CREATE POLICY "Users can read all reviews" ON public.reviews FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own reviews" ON public.reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Check if rating column exists in restaurants, if not add it
+DO e:\foodiempt-main BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'restaurants' AND column_name = 'rating') THEN
+    ALTER TABLE public.restaurants ADD COLUMN rating DECIMAL(2,1);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'restaurants' AND column_name = 'rating_count') THEN
+    ALTER TABLE public.restaurants ADD COLUMN rating_count INTEGER DEFAULT 0;
+  END IF;
+END e:\foodiempt-main;
+
+-- Function to update restaurant rating on new review
+CREATE OR REPLACE FUNCTION public.update_restaurant_rating()
+RETURNS TRIGGER AS e:\foodiempt-main
+BEGIN
+  UPDATE public.restaurants
+  SET 
+    rating = (SELECT AVG(rating)::DECIMAL(2,1) FROM public.reviews WHERE restaurant_id = NEW.restaurant_id),
+    rating_count = (SELECT COUNT(*) FROM public.reviews WHERE restaurant_id = NEW.restaurant_id)
+  WHERE id = NEW.restaurant_id;
+  RETURN NEW;
+END;
+e:\foodiempt-main LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger for rating update
+DROP TRIGGER IF EXISTS on_review_created ON public.reviews;
+CREATE TRIGGER on_review_created
+  AFTER INSERT ON public.reviews
+  FOR EACH ROW EXECUTE FUNCTION public.update_restaurant_rating();
+

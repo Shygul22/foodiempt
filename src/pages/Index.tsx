@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,12 +12,12 @@ import { useCartStore } from '@/stores/cartStore';
 import { FavouriteButton } from '@/components/FavouriteButton';
 import { LocationHeader } from '@/components/LocationHeader';
 import { AIRecommendations } from '@/components/AIRecommendations';
-import { 
-  Search, 
-  MapPin, 
-  Clock, 
-  Star, 
-  ShoppingCart, 
+import {
+  Search,
+  MapPin,
+  Clock,
+  Star,
+  ShoppingCart,
   Utensils,
   Shield,
   Store,
@@ -39,20 +39,10 @@ export default function Index() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'favourites'>('all');
   const [loading, setLoading] = useState(true);
-  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const { deliveryAddress, setDeliveryAddress } = useCartStore();
   const cartItems = useCartStore((state) => state.getTotalItems());
 
-  useEffect(() => {
-    fetchRestaurants();
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      fetchFavourites();
-    }
-  }, [user]);
-
-  const fetchRestaurants = async () => {
+  const fetchRestaurants = useCallback(async () => {
     const { data, error } = await supabase
       .from('restaurants')
       .select('*')
@@ -65,28 +55,40 @@ export default function Index() {
       setRestaurants(data || []);
     }
     setLoading(false);
-  };
+  }, []);
 
-  const fetchFavourites = async () => {
+  const fetchFavourites = useCallback(async () => {
+    if (!user) return;
+
     const { data } = await supabase
       .from('favourite_shops')
       .select('restaurant_id')
-      .eq('user_id', user!.id);
-    
+      .eq('user_id', user.id);
+
     if (data) {
       setFavouriteIds(data.map(f => f.restaurant_id));
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    fetchRestaurants();
+  }, [fetchRestaurants]);
+
+  useEffect(() => {
+    if (user) {
+      fetchFavourites();
+    }
+  }, [user, fetchFavourites]);
 
   const filteredRestaurants = restaurants.filter((restaurant) => {
-    const matchesSearch = 
+    const matchesSearch =
       restaurant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       restaurant.cuisine_type?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesFavourites = 
-      activeTab === 'all' || 
+
+    const matchesFavourites =
+      activeTab === 'all' ||
       favouriteIds.includes(restaurant.id);
-    
+
     return matchesSearch && matchesFavourites;
   });
 
@@ -98,9 +100,9 @@ export default function Index() {
         <div className="container mx-auto px-4 py-2">
           <div className="flex items-center justify-between gap-3">
             {/* Location + Brand */}
-            <div className="flex items-center gap-2">
-              <LocationHeader 
-                address={deliveryAddress} 
+            <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
+              <LocationHeader
+                address={deliveryAddress}
                 onAddressChange={setDeliveryAddress}
               />
             </div>
@@ -118,37 +120,37 @@ export default function Index() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {user ? (
                 <>
                   {hasRole('super_admin') && (
-                    <Link to="/admin">
+                    <Link to="/admin" className="hidden md:block">
                       <Button variant="ghost" size="icon" className="h-9 w-9">
                         <Shield className="w-4 h-4" />
                       </Button>
                     </Link>
                   )}
                   {hasRole('restaurant_owner') && (
-                    <Link to="/restaurant">
+                    <Link to="/restaurant" className="hidden md:block">
                       <Button variant="ghost" size="icon" className="h-9 w-9">
                         <Store className="w-4 h-4" />
                       </Button>
                     </Link>
                   )}
                   {hasRole('delivery_partner') && (
-                    <Link to="/delivery">
+                    <Link to="/delivery" className="hidden md:block">
                       <Button variant="ghost" size="icon" className="h-9 w-9">
                         <Bike className="w-4 h-4" />
                       </Button>
                     </Link>
                   )}
-                  
+
                   <Link to="/orders">
                     <Button variant="ghost" size="sm" className="hidden sm:flex text-xs h-9">
                       Orders
                     </Button>
                   </Link>
-                  
+
                   <Link to="/cart" className="relative">
                     <Button variant="default" size="sm" className="h-9 gap-1.5 rounded-full px-3">
                       <ShoppingCart className="w-4 h-4" />
@@ -157,7 +159,7 @@ export default function Index() {
                       )}
                     </Button>
                   </Link>
-                  
+
                   <Link to="/profile">
                     <Button variant="ghost" size="icon" className="h-9 w-9">
                       <User className="w-4 h-4" />
@@ -296,15 +298,14 @@ export default function Index() {
                           <Utensils className="w-10 h-10 text-muted-foreground/30" />
                         </div>
                       )}
-                      
+
                       {/* Status Badge */}
-                      <Badge 
+                      <Badge
                         variant={restaurant.is_open ? "default" : "secondary"}
-                        className={`absolute top-2 left-2 text-[10px] px-1.5 py-0.5 ${
-                          restaurant.is_open 
-                            ? 'bg-accent text-accent-foreground' 
-                            : 'bg-muted/90 text-muted-foreground'
-                        }`}
+                        className={`absolute top-2 left-2 text-[10px] px-1.5 py-0.5 ${restaurant.is_open
+                          ? 'bg-accent text-accent-foreground'
+                          : 'bg-muted/90 text-muted-foreground'
+                          }`}
                       >
                         {restaurant.is_open ? 'Open' : 'Closed'}
                       </Badge>
@@ -320,10 +321,10 @@ export default function Index() {
                       {/* Delivery Time Chip */}
                       <div className="absolute bottom-2 left-2 bg-card/95 backdrop-blur-sm rounded-full px-2 py-0.5 flex items-center gap-1">
                         <Clock className="w-3 h-3 text-primary" />
-                        <span className="text-[10px] font-semibold">20-30 min</span>
+                        <span className="text-[10px] font-semibold">{restaurant.estimated_delivery_time || '20-30 min'}</span>
                       </div>
                     </div>
-                    
+
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between gap-1 mb-1">
                         <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">
@@ -331,14 +332,14 @@ export default function Index() {
                         </h3>
                         <div className="flex items-center gap-0.5 shrink-0">
                           <Star className="w-3 h-3 fill-status-pending text-status-pending" />
-                          <span className="text-xs font-medium">4.5</span>
+                          <span className="text-xs font-medium">{restaurant.rating || 'New'}</span>
                         </div>
                       </div>
-                      
+
                       {restaurant.cuisine_type && (
                         <p className="text-xs text-muted-foreground line-clamp-1 mb-2">{restaurant.cuisine_type}</p>
                       )}
-                      
+
                       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { CustomerAddress } from '@/types/database';
@@ -43,17 +43,13 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
   const [newLabel, setNewLabel] = useState('Home');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      fetchAddresses();
-    }
-  }, [user]);
+  const fetchAddresses = useCallback(async () => {
+    if (!user) return;
 
-  const fetchAddresses = async () => {
     const { data } = await supabase
       .from('customer_addresses')
       .select('*')
-      .eq('user_id', user!.id)
+      .eq('user_id', user.id)
       .order('is_default', { ascending: false });
 
     if (data) {
@@ -64,7 +60,13 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
         onAddressChange(defaultAddr.address);
       }
     }
-  };
+  }, [user, selectedAddress, onAddressChange]);
+
+  useEffect(() => {
+    if (user) {
+      fetchAddresses();
+    }
+  }, [user, fetchAddresses]);
 
   const addAddress = async () => {
     if (!newAddress.trim()) {
@@ -201,6 +203,22 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
       {addresses.length > 0 ? (
         <RadioGroup value={selectedAddress} onValueChange={handleAddressSelect}>
           <div className="space-y-2 max-h-48 overflow-y-auto">
+            {/* Show currently selected/detected address if not in saved list */}
+            {selectedAddress && !addresses.find(a => a.address === selectedAddress) && (
+              <div className="flex items-center space-x-3 p-3 border rounded-lg bg-primary/5 border-primary/20">
+                <RadioGroupItem value={selectedAddress} id="current-location" />
+                <Label htmlFor="current-location" className="flex-1 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    <span className="font-medium text-primary">Current Location</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                    {selectedAddress}
+                  </p>
+                </Label>
+              </div>
+            )}
+
             {addresses.map((addr) => (
               <div
                 key={addr.id}

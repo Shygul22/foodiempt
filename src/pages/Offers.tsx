@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef } from 'react';
+import React, { useState, useEffect, forwardRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Percent, Clock, Gift, Phone, Check, Copy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -54,6 +54,35 @@ const OffersPage = forwardRef<HTMLDivElement>((_, ref) => {
   const [userPhone, setUserPhone] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+
+
+  const fetchCoupons = async () => {
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setCoupons(data);
+    }
+    setLoading(false);
+  };
+
+  const fetchUserPhone = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('profiles')
+      .select('phone')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (data?.phone) {
+      setUserPhone(data.phone);
+      setPhoneNumber(data.phone);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchCoupons();
     if (user) {
@@ -79,33 +108,7 @@ const OffersPage = forwardRef<HTMLDivElement>((_, ref) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
-
-  const fetchCoupons = async () => {
-    const { data, error } = await supabase
-      .from('coupons')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setCoupons(data);
-    }
-    setLoading(false);
-  };
-
-  const fetchUserPhone = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('phone')
-      .eq('id', user!.id)
-      .maybeSingle();
-
-    if (data?.phone) {
-      setUserPhone(data.phone);
-      setPhoneNumber(data.phone);
-    }
-  };
+  }, [user, fetchUserPhone]);
 
   const handleApplyCoupon = (coupon: Coupon) => {
     if (!user) {
@@ -202,8 +205,8 @@ const OffersPage = forwardRef<HTMLDivElement>((_, ref) => {
           </div>
         ) : (
           coupons.map((coupon, index) => (
-            <Card 
-              key={coupon.id} 
+            <Card
+              key={coupon.id}
               className={`border-0 shadow-lg overflow-hidden bg-gradient-to-r ${bgClasses[index % bgClasses.length]}`}
             >
               <CardContent className="p-0">
@@ -234,8 +237,8 @@ const OffersPage = forwardRef<HTMLDivElement>((_, ref) => {
                         )}
                       </div>
                       <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="outline"
                           className="h-8"
                           onClick={() => copyCode(coupon.code)}
@@ -246,7 +249,7 @@ const OffersPage = forwardRef<HTMLDivElement>((_, ref) => {
                             <><Copy className="w-3 h-3 mr-1" /> Copy</>
                           )}
                         </Button>
-                        <Button 
+                        <Button
                           size="sm"
                           className="h-8"
                           onClick={() => handleApplyCoupon(coupon)}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef } from 'react';
+import React, { useState, useEffect, forwardRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Restaurant, MenuItem } from '@/types/database';
@@ -7,17 +7,17 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { RestaurantReviews } from '@/components/RestaurantReviews';
-import { 
+
 import {
-    ArrowLeft,
-    MapPin,
-    Clock,
-    Star,
-    Plus,
-    Minus,
-    ShoppingCart,
-    Utensils
-  } from 'lucide-react';
+  ArrowLeft,
+  MapPin,
+  Clock,
+  Star,
+  Plus,
+  Minus,
+  ShoppingCart,
+  Utensils
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useHaptics } from "@/hooks/useHaptics";
 import { ImpactStyle, NotificationType } from "@capacitor/haptics";
@@ -32,13 +32,10 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
   const { items, addItem, updateQuantity, getTotalItems, getTotalAmount } = useCartStore();
   const { impact, notification } = useHaptics();
 
-  useEffect(() => {
-    if (id) {
-      fetchRestaurantAndMenu();
-    }
-  }, [id]);
 
-  const fetchRestaurantAndMenu = async () => {
+
+  const fetchRestaurantAndMenu = useCallback(async () => {
+    if (!id) return;
     const [restaurantRes, menuRes, reviewsRes] = await Promise.all([
       supabase.from('restaurants').select('*').eq('id', id).maybeSingle(),
       supabase.from('menu_items').select('*').eq('restaurant_id', id).eq('is_available', true).order('category'),
@@ -56,7 +53,13 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
       setReviewStats({ average: avg, count: reviewsRes.data.length });
     }
     setLoading(false);
-  };
+  }, [id]);
+
+  useEffect(() => {
+    if (id) {
+      fetchRestaurantAndMenu();
+    }
+  }, [id, fetchRestaurantAndMenu]);
 
   const getItemQuantity = (menuItemId: string) => {
     const cartItem = items.find((item) => item.menuItem.id === menuItemId);
@@ -154,8 +157,8 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
         <div className="absolute bottom-0 left-0 right-0 p-6">
           <div className="container mx-auto">
             <div className={`inline-flex px-3 py-1 rounded-full text-sm font-medium mb-3 ${restaurant.is_open
-                ? 'bg-accent text-accent-foreground'
-                : 'bg-destructive text-destructive-foreground'
+              ? 'bg-accent text-accent-foreground'
+              : 'bg-destructive text-destructive-foreground'
               }`}>
               {restaurant.is_open ? 'Open Now' : 'Closed'}
             </div>
