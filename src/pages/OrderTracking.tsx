@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { GlobalLoading } from '@/components/ui/GlobalLoading';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Order, OrderStatus, DeliveryPartner } from '@/types/database';
@@ -156,11 +157,7 @@ export default function OrderTracking() {
   }, [user, authLoading, orderId, navigate, fetchOrder, subscribeToUpdates]);
 
   if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <GlobalLoading message="Loading orders..." />;
   }
 
   if (!order) {

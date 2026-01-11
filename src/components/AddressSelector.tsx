@@ -20,13 +20,33 @@ import {
   Briefcase,
   MapPinned,
   Check,
-  Trash2
+  Trash2,
+  LocateFixed,
+  Loader2,
+  ChevronsUpDown
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { DeliveryPincode } from '@/types/database';
 
 interface AddressSelectorProps {
   selectedAddress: string;
   onAddressChange: (address: string) => void;
+  onPincodeChange?: (pincode: string) => void;
+  onLocalityChange?: (locality: string) => void;
 }
 
 const addressLabels = [
@@ -35,13 +55,32 @@ const addressLabels = [
   { value: 'Other', icon: <MapPinned className="w-4 h-4" /> },
 ];
 
-export function AddressSelector({ selectedAddress, onAddressChange }: AddressSelectorProps) {
+export function AddressSelector({ selectedAddress, onAddressChange, onPincodeChange, onLocalityChange }: AddressSelectorProps) {
   const { user } = useAuth();
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newAddress, setNewAddress] = useState('');
+  const [newPincode, setNewPincode] = useState('');
+  const [newPincodeDescription, setNewPincodeDescription] = useState('');
   const [newLabel, setNewLabel] = useState('Home');
   const [loading, setLoading] = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  // Pincode selection state
+  const [openPincode, setOpenPincode] = useState(false);
+  const [availablePincodes, setAvailablePincodes] = useState<DeliveryPincode[]>([]);
+
+  const fetchPincodes = useCallback(async () => {
+    const { data } = await supabase
+      .from('delivery_pincodes')
+      .select('*')
+      .eq('is_active', true)
+      .order('pincode');
+
+    if (data) {
+      setAvailablePincodes(data);
+    }
+  }, []);
 
   const fetchAddresses = useCallback(async () => {
     if (!user) return;
@@ -54,19 +93,96 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
 
     if (data) {
       setAddresses(data as CustomerAddress[]);
+      if (selectedAddress) {
+        const current = data.find(a => a.address === selectedAddress);
+        if (current && current.pincode && onPincodeChange) {
+          onPincodeChange(current.pincode);
+        }
+        if (current && current.locality && onLocalityChange) {
+          onLocalityChange(current.locality);
+        } else if (selectedAddress && onPincodeChange) {
+          // Try to extract pincode from the address string (looking for 6 digits)
+          const pincodeMatch = selectedAddress.match(/\b\d{6}\b/);
+          if (pincodeMatch) {
+            onPincodeChange(pincodeMatch[0]);
+          }
+        }
+      }
+
       // If no address selected and we have saved addresses, select default or first
       if (!selectedAddress && data.length > 0) {
         const defaultAddr = data.find(a => a.is_default) || data[0];
         onAddressChange(defaultAddr.address);
+        if (onPincodeChange && defaultAddr.pincode) {
+          onPincodeChange(defaultAddr.pincode);
+        }
       }
     }
-  }, [user, selectedAddress, onAddressChange]);
+  }, [user, selectedAddress, onAddressChange, onPincodeChange, onLocalityChange]);
 
   useEffect(() => {
     if (user) {
       fetchAddresses();
+      fetchPincodes();
     }
-  }, [user, fetchAddresses]);
+  }, [user, fetchAddresses, fetchPincodes]);
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+
+          // Use OpenStreetMap Nominatim for reverse geocoding
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await response.json();
+
+          if (data && data.address) {
+            const addr = data.display_name;
+            const pincode = data.address.postcode || '';
+
+            setNewAddress(addr);
+            if (pincode) {
+              setNewPincode(pincode.replace(/\D/g, '')); // Ensure only digits
+            }
+            toast.success('Location detected!');
+          } else {
+            toast.error('Could not fetch address details');
+          }
+        } catch (error) {
+          toast.error('Failed to fetch address details');
+          console.error(error);
+        } finally {
+          setLocating(false);
+        }
+      },
+      (error) => {
+        setLocating(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            toast.error('Location permission denied');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            toast.error('Location information unavailable');
+            break;
+          case error.TIMEOUT:
+            toast.error('Location request timed out');
+            break;
+          default:
+            toast.error('An unknown error occurred');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
 
   const addAddress = async () => {
     if (!newAddress.trim()) {
@@ -74,8 +190,29 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
       return;
     }
 
+    if (!newPincode.trim() || newPincode.length < 6) {
+      toast.error('Please enter a valid 6-digit pincode');
+      return;
+    }
+
     setLoading(true);
     try {
+      // Validate pincode 
+      const { data: pincodeData, error: pincodeError } = await supabase
+        .from('delivery_pincodes')
+        .select('id')
+        .eq('pincode', newPincode)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (pincodeError) throw pincodeError;
+
+      if (!pincodeData) {
+        toast.error('Sorry, we do not deliver to this pincode yet');
+        setLoading(false);
+        return;
+      }
       const isFirst = addresses.length === 0;
       const { data, error } = await supabase
         .from('customer_addresses')
@@ -83,6 +220,8 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
           user_id: user!.id,
           label: newLabel,
           address: newAddress,
+          pincode: newPincode,
+          locality: newPincodeDescription,
           is_default: isFirst,
         })
         .select()
@@ -92,7 +231,10 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
 
       setAddresses([...addresses, data as CustomerAddress]);
       onAddressChange(newAddress);
+      if (onPincodeChange) onPincodeChange(newPincode);
       setNewAddress('');
+      setNewPincode('');
+      setNewPincodeDescription('');
       setShowAddDialog(false);
       toast.success('Address saved!');
     } catch (error: unknown) {
@@ -140,6 +282,13 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
 
   const handleAddressSelect = (address: string) => {
     onAddressChange(address);
+    const selected = addresses.find(a => a.address === address);
+    if (selected && selected.pincode && onPincodeChange) {
+      onPincodeChange(selected.pincode);
+    }
+    if (selected && selected.locality && onLocalityChange) {
+      onLocalityChange(selected.locality);
+    }
   };
 
   const getLabelIcon = (label: string) => {
@@ -163,6 +312,21 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
               <DialogTitle>Add New Address</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 text-primary border-primary/20 hover:bg-primary/5"
+                onClick={detectLocation}
+                disabled={locating}
+              >
+                {locating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LocateFixed className="w-4 h-4" />
+                )}
+                {locating ? 'Detecting...' : 'Use Current Location'}
+              </Button>
+
               <div className="flex gap-2 flex-wrap">
                 {addressLabels.map((label) => (
                   <Button
@@ -188,6 +352,59 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="new-pincode">Pincode</Label>
+                <Popover open={openPincode} onOpenChange={setOpenPincode}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openPincode}
+                      className="w-full justify-between"
+                    >
+                      {newPincode
+                        ? `${newPincode} - ${newPincodeDescription || availablePincodes.find((p) => p.pincode === newPincode)?.description || ''}`
+                        : "Select pincode..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search pincode or area..." />
+                      <CommandList>
+                        <CommandEmpty>No delivery area found.</CommandEmpty>
+                        <CommandGroup heading="Available Delivery Areas">
+                          {availablePincodes.map((pincode) => (
+                            <CommandItem
+                              key={pincode.id}
+                              value={`${pincode.pincode} ${pincode.description || ''}`}
+                              onSelect={() => {
+                                setNewPincode(pincode.pincode);
+                                setNewPincodeDescription(pincode.description || '');
+                                setOpenPincode(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  newPincode === pincode.pincode ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-medium">{pincode.pincode}</span>
+                                {pincode.description && (
+                                  <span className="text-xs text-muted-foreground">{pincode.description}</span>
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
               <Button
                 onClick={addAddress}
                 disabled={loading || !newAddress.trim()}
@@ -200,7 +417,7 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
         </Dialog>
       </div>
 
-      {addresses.length > 0 ? (
+      {addresses.length > 0 || selectedAddress ? (
         <RadioGroup value={selectedAddress} onValueChange={handleAddressSelect}>
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {/* Show currently selected/detected address if not in saved list */}
@@ -237,6 +454,10 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
                   </div>
                   <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
                     {addr.address}
+                    <br />
+                    <span className="text-xs text-muted-foreground/80">
+                      Pin: {addr.pincode || 'N/A'}
+                    </span>
                   </p>
                 </Label>
                 <div className="flex gap-1">
@@ -264,14 +485,16 @@ export function AddressSelector({ selectedAddress, onAddressChange }: AddressSel
           </div>
         </RadioGroup>
       ) : (
-        <div className="relative">
-          <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Enter your address"
-            value={selectedAddress}
-            onChange={(e) => onAddressChange(e.target.value)}
-            className="pl-10"
-          />
+        <div className="text-center py-8 bg-muted/20 rounded-lg border-2 border-dashed">
+          <MapPin className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+          <p className="text-sm text-muted-foreground mb-4">No saved addresses found</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddDialog(true)}
+          >
+            Add New Address
+          </Button>
         </div>
       )}
     </div>

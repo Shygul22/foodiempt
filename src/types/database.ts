@@ -1,4 +1,4 @@
-export type AppRole = 'super_admin' | 'restaurant_owner' | 'delivery_partner' | 'customer';
+export type AppRole = 'super_admin' | 'restaurant_owner' | 'delivery_partner' | 'customer' | 'support_agent';
 
 export type ShopCategory = 'food' | 'grocery' | 'fruits' | 'vegetables' | 'meat' | 'medicine' | 'bakery' | 'beverages';
 
@@ -29,6 +29,7 @@ export interface Restaurant {
   description: string | null;
   address: string;
   phone: string | null;
+  pincode: string | null;
   image_url: string | null;
   cuisine_type: string | null;
   category: string;
@@ -112,6 +113,7 @@ export interface CustomerAddress {
   user_id: string;
   label: string;
   address: string;
+  pincode: string;
   lat: number | null;
   lng: number | null;
   is_default: boolean;
@@ -135,11 +137,33 @@ export interface AppSettings {
 
 export interface Settlement {
   id: string;
-  delivery_partner_id: string;
+  delivery_partner_id: string | null;
+  restaurant_id: string | null;
   amount: number;
   status: 'pending' | 'processed' | 'failed';
   reference_no: string | null;
   processed_at: string | null;
   created_at: string;
   profiles?: Profile;
+  restaurants?: Restaurant;
+}
+
+
+export interface DeliveryPincode {
+  id: string;
+  pincode: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RestaurantDeliveryPincode {
+  id: string;
+  restaurant_id: string;
+  pincode: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }

@@ -37,6 +37,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type PaymentMethod = 'cod' | 'gpay';
 
@@ -52,12 +61,14 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { items, restaurantId, updateQuantity, removeItem, clearCart, getTotalAmount, deliveryAddress, setDeliveryAddress } = useCartStore();
+  const [selectedPincode, setSelectedPincode] = useState('');
+  const [selectedLocality, setSelectedLocality] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
-  const [restaurant, setRestaurant] = useState<{ name: string; address: string } | null>(null);
+  const [restaurant, setRestaurant] = useState<{ name: string; address: string; pincode?: string; locality?: string } | null>(null);
 
   // Coupon states
   const [couponCode, setCouponCode] = useState('');
@@ -69,6 +80,10 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [userPhone, setUserPhone] = useState<string | null>(null);
 
+  // Order success dialog
+  const [showOrderSuccess, setShowOrderSuccess] = useState(false);
+  const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
+
 
 
   const fetchRestaurant = useCallback(async () => {
@@ -76,7 +91,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
 
     const { data } = await supabase
       .from('restaurants')
-      .select('name, address')
+      .select('name, address, pincode, locality')
       .eq('id', restaurantId)
       .single();
 
@@ -124,11 +139,41 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
   const subtotal = getTotalAmount();
   const freeDeliveryThreshold = 199;
   const isFreeDelivery = subtotal >= freeDeliveryThreshold;
-  const finalDeliveryFee = isFreeDelivery ? 0 : deliveryFee;
+
+  // Extra fee logic: Same pincode but different locality = +₹5
+  let extraDeliveryFee = 0;
+  if (restaurant?.pincode && selectedPincode &&
+    restaurant.pincode.trim() === selectedPincode.trim()) {
+    if (restaurant?.locality && selectedLocality &&
+      restaurant.locality.trim().toLowerCase() !== selectedLocality.trim().toLowerCase()) {
+      extraDeliveryFee = 5;
+    }
+  }
+
+  const baseDeliveryFee = isFreeDelivery ? 0 : deliveryFee;
+  const finalDeliveryFee = baseDeliveryFee + extraDeliveryFee;
   const amountForFreeDelivery = freeDeliveryThreshold - subtotal;
 
   // Coupon discount
   const couponDiscount = appliedCoupon?.discountAmount || 0;
+
+  // Schedule config
+  const [scheduleConfig, setScheduleConfig] = useState<{ enabled: boolean; startTime: string; endTime: string; maxDays: number } | undefined>(undefined);
+
+  useEffect(() => {
+    const fetchScheduleConfig = async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'schedule_config')
+        .maybeSingle();
+
+      if (data?.value) {
+        setScheduleConfig(typeof data.value === 'string' ? JSON.parse(data.value) : data.value);
+      }
+    };
+    fetchScheduleConfig();
+  }, []);
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) {
@@ -237,6 +282,11 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
       return;
     }
 
+    if (!selectedPincode) {
+      toast.error('Please select a valid delivery address with a pincode');
+      return;
+    }
+
     if (items.length === 0) {
       toast.error('Your cart is empty');
       return;
@@ -245,6 +295,100 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
     setLoading(true);
 
     try {
+      // Validate pincode before placing order
+      // 1. Check if restaurant has specific delivery areas defined
+      const { data: restaurantPincodes, error: restaurantPincodesError } = await supabase
+        .from('restaurant_delivery_pincodes')
+        .select('pincode')
+        .eq('restaurant_id', restaurantId!)
+        .eq('is_active', true);
+
+      if (restaurantPincodesError) throw restaurantPincodesError;
+
+      if (restaurantPincodes && restaurantPincodes.length > 0) {
+        // Restaurant has specific areas, check if selected pincode is one of them
+        const isServiced = restaurantPincodes.some(p => p.pincode === selectedPincode);
+        if (!isServiced) {
+          toast.error('Sorry, this restaurant does not deliver to your area');
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Fallback to global delivery pincodes if restaurant hasn't defined any
+        const { data: globalPincode, error: globalPincodeError } = await supabase
+          .from('delivery_pincodes')
+          .select('is_active')
+          .eq('pincode', selectedPincode)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (globalPincodeError) throw globalPincodeError;
+
+        if (!globalPincode) {
+          toast.error('Sorry, delivery is not available to this pincode area');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Check if any delivery partners are online
+      const { count: activePartnersCount, error: partnerError } = await supabase
+        .from('delivery_partners')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_available', true);
+
+      if (partnerError) {
+        console.error('Error checking partners:', partnerError);
+        // We might want to allow order if check fails, or block it. 
+        // Blocking is safer to avoid unsatisfied orders.
+        toast.error('Service temporarily unavailable. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      if (activePartnersCount === 0) {
+        setLoading(false);
+        toast.error('Service Unavailable: No delivery partners are currently online. Please try again later.');
+        return;
+      }
+
+      // Check Operating Hours (if not scheduled)
+      if (!isScheduled) {
+        const { data: opData } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'operating_hours')
+          .maybeSingle();
+
+        if (opData?.value) {
+          const config = typeof opData.value === 'string' ? JSON.parse(opData.value) : opData.value;
+
+          if (config.isOpen === false) {
+            setLoading(false);
+            toast.error('Store is currently closed for new orders.', { duration: 4000 });
+            return;
+          }
+
+          if (config.startTime && config.endTime) {
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+
+            const [startH, startM] = config.startTime.split(':').map(Number);
+            const startTime = startH * 60 + startM;
+
+            const [endH, endM] = config.endTime.split(':').map(Number);
+            const endTime = endH * 60 + endM;
+
+            if (currentTime < startTime || currentTime > endTime) {
+              setLoading(false);
+              toast.error(`We are closed. Open from ${config.startTime} to ${config.endTime}`, { duration: 5000 });
+              return;
+            }
+          }
+        }
+      }
+
       // Create order with delivery fee
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -280,8 +424,11 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
       if (itemsError) throw itemsError;
 
       clearCart();
-      toast.success('Order placed successfully!');
-      navigate('/orders');
+      setPlacedOrderId(order.id);
+      setLoading(false);
+      setShowOrderSuccess(true);
+      // toast.success('Order placed successfully!');
+      // navigate('/orders');
     } catch (error: unknown) {
       console.error('Checkout error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to place order';
@@ -351,7 +498,8 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
 
       <div className="container mx-auto px-4 py-4">
         <div className="grid lg:grid-cols-3 gap-4">
-          {/* Cart Items */}
+
+          {/* Bill Details */}
           <div className="lg:col-span-2 space-y-3">
             {items.map((item) => (
               <Card key={item.menuItem.id} className="overflow-hidden border-0 shadow-sm">
@@ -415,13 +563,18 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
                 <AddressSelector
                   selectedAddress={deliveryAddress}
                   onAddressChange={setDeliveryAddress}
+                  onPincodeChange={setSelectedPincode}
+                  onLocalityChange={setSelectedLocality}
                 />
 
-                <ScheduleDelivery
-                  isScheduled={isScheduled}
-                  scheduledAt={scheduledAt}
-                  onScheduleChange={handleScheduleChange}
-                />
+                {(scheduleConfig?.enabled !== false) && (
+                  <ScheduleDelivery
+                    isScheduled={isScheduled}
+                    scheduledAt={scheduledAt}
+                    onScheduleChange={handleScheduleChange}
+                    config={scheduleConfig}
+                  />
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="notes" className="text-xs">Order Notes (optional)</Label>
@@ -525,7 +678,7 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
                       Delivery Fee
                     </span>
                     <span className={isFreeDelivery ? 'text-accent line-through' : ''}>
-                      ₹{deliveryFee}
+                      ₹{deliveryFee + extraDeliveryFee}
                     </span>
                   </div>
                   {isFreeDelivery && (
@@ -607,6 +760,25 @@ const CartPage = forwardRef<HTMLDivElement>((_, ref) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showOrderSuccess} onOpenChange={setShowOrderSuccess}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center text-xl text-primary">Order Placed Successfully! 🎉</AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Your order has been sent to the restaurant. You will be notified when they confirm it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center">
+            <AlertDialogAction
+              onClick={() => navigate(`/order/${placedOrderId}`)}
+              className="w-full sm:w-auto"
+            >
+              View Order Status
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 });

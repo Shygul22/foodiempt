@@ -7,6 +7,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { RestaurantReviews } from '@/components/RestaurantReviews';
+import { RestaurantDeliveryAreas } from '@/components/restaurant/RestaurantDeliveryAreas';
+import { GlobalLoading } from '@/components/ui/GlobalLoading';
 
 import {
   ArrowLeft,
@@ -43,7 +45,7 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
     ]);
 
     if (restaurantRes.data) {
-      setRestaurant(restaurantRes.data);
+      setRestaurant(restaurantRes.data as unknown as Restaurant);
     }
     if (menuRes.data) {
       setMenuItems(menuRes.data);
@@ -96,11 +98,7 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
   }, {} as Record<string, MenuItem[]>);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <GlobalLoading message="Loading shop details..." />;
   }
 
   if (!restaurant) {
@@ -126,7 +124,7 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
               <ArrowLeft className="w-5 h-5" />
               <span>Back</span>
             </Link>
-            <Link to="/cart" className="relative">
+            <Link to="/cart" className="relative hidden md:block">
               <Button variant="outline" size="icon">
                 <ShoppingCart className="w-5 h-5" />
                 {getTotalItems() > 0 && (
@@ -180,8 +178,9 @@ const RestaurantDetail = forwardRef<HTMLDivElement>((_, ref) => {
               </div>
               <div className="flex items-center gap-1">
                 <MapPin className="w-4 h-4" />
-                <span>{restaurant.address}</span>
+                <span>{restaurant.address}{restaurant.pincode ? `, ${restaurant.pincode}` : ''}</span>
               </div>
+              <RestaurantDeliveryAreas restaurantId={restaurant.id} />
             </div>
           </div>
         </div>

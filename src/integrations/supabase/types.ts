@@ -97,6 +97,7 @@ export type Database = {
           lng: number | null
           updated_at: string
           user_id: string
+          pincode: string
         }
         Insert: {
           address: string
@@ -108,6 +109,7 @@ export type Database = {
           lng?: number | null
           updated_at?: string
           user_id: string
+          pincode: string
         }
         Update: {
           address?: string
@@ -119,6 +121,7 @@ export type Database = {
           lng?: number | null
           updated_at?: string
           user_id?: string
+          pincode?: string
         }
         Relationships: []
       }
@@ -171,6 +174,33 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      delivery_pincodes: {
+        Row: {
+          id: string
+          pincode: string
+          description: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          pincode: string
+          description?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          pincode?: string
+          description?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       favourite_shops: {
         Row: {
@@ -544,6 +574,44 @@ export type Database = {
           },
         ]
       }
+      restaurant_delivery_pincodes: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          pincode: string
+          restaurant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          pincode: string
+          restaurant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          pincode?: string
+          restaurant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restaurant_delivery_pincodes_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurants: {
         Row: {
           address: string
@@ -658,6 +726,83 @@ export type Database = {
             columns: ["delivery_partner_id"]
             isOneToOne: false
             referencedRelation: "delivery_partners"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      support_tickets: {
+        Row: {
+          id: string
+          user_id: string
+          subject: string
+          status: "open" | "in_progress" | "resolved" | "closed"
+          priority: "low" | "medium" | "high" | "urgent"
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          subject: string
+          status?: "open" | "in_progress" | "resolved" | "closed"
+          priority?: "low" | "medium" | "high" | "urgent"
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          subject?: string
+          status?: "open" | "in_progress" | "resolved" | "closed"
+          priority?: "low" | "medium" | "high" | "urgent"
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      support_messages: {
+        Row: {
+          id: string
+          ticket_id: string
+          sender_id: string
+          message: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          ticket_id: string
+          sender_id: string
+          message: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          ticket_id?: string
+          sender_id?: string
+          message?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
         ]

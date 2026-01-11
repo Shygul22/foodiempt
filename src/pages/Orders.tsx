@@ -1,5 +1,6 @@
 import React, { useState, useEffect, forwardRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { GlobalLoading } from '@/components/ui/GlobalLoading';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Order, OrderStatus } from '@/types/database';
@@ -196,15 +197,11 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
   };
 
   const canCancelOrder = (status: OrderStatus) => {
-    return ['pending', 'confirmed'].includes(status);
+    return status === 'pending';
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <GlobalLoading message="Loading orders..." />;
   }
 
   return (
@@ -264,6 +261,7 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
                       </div>
                     </Link>
 
+
                     {/* Order Tracking Steps for Active Orders */}
                     {isActive && (
                       <div className="mb-4 p-3 bg-secondary/30 rounded-lg">
@@ -286,7 +284,6 @@ const OrdersPage = forwardRef<HTMLDivElement>((_, ref) => {
                       </div>
                     )}
 
-                    {/* Shop Contact */}
                     {order.restaurants?.phone && isActive && (
                       <div className="flex items-center justify-between p-2 bg-primary/5 rounded-lg mb-3">
                         <span className="text-sm text-muted-foreground">Contact Shop</span>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, forwardRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { GlobalLoading } from '@/components/ui/GlobalLoading';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -104,11 +105,7 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <GlobalLoading message="Loading profile..." />;
   }
 
   const menuItems = [
@@ -117,6 +114,7 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
     { icon: MapPin, label: 'Addresses', href: '/?addresses=true' },
     { icon: Gift, label: 'Offers', href: '/offers' },
     { icon: Users, label: 'Refer & Earn', href: '/refer' },
+    { icon: Shield, label: 'Security Settings', href: '/security' },
   ];
 
   const policyItems = [
@@ -220,7 +218,8 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
         </Card>
 
         {/* Dashboards Section - conditionally rendered based on roles */}
-        {(hasRole('super_admin') || hasRole('restaurant_owner') || hasRole('delivery_partner')) && (
+        {/* Dashboards Section - conditionally rendered based on roles */}
+        {(hasRole('super_admin') || hasRole('restaurant_owner') || hasRole('delivery_partner') || hasRole('support_agent')) && (
           <Card className="border-0 shadow-lg">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground">Dashboards</CardTitle>
@@ -234,6 +233,18 @@ const ProfilePage = forwardRef<HTMLDivElement>((_, ref) => {
                   <div className="flex items-center gap-3">
                     <Shield className="w-5 h-5 text-primary" />
                     <span className="font-medium">Admin Dashboard</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </Link>
+              )}
+              {hasRole('support_agent') && (
+                <Link
+                  to="/staff/support"
+                  className="flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors border-b border-border"
+                >
+                  <div className="flex items-center gap-3">
+                    <Shield className="w-5 h-5 text-blue-500" />
+                    <span className="font-medium">Support Panel</span>
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground" />
                 </Link>

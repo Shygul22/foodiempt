@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { GlobalLoading } from '@/components/ui/GlobalLoading';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { Order, OrderStatus, DeliveryPartner } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -50,7 +51,8 @@ import {
   Star,
   Calendar,
   Percent,
-  Award
+  Award,
+  MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -72,6 +74,7 @@ export default function DeliveryDashboard() {
   const [deliveryPartner, setDeliveryPartner] = useState<DeliveryPartner | null>(null);
   const [profile, setProfile] = useState<{ full_name: string | null; phone: string | null } | null>(null);
   const [availableOrders, setAvailableOrders] = useState<OrderWithDetails[]>([]);
+  const [passedOrderIds, setPassedOrderIds] = useState<string[]>([]);
   const [myOrders, setMyOrders] = useState<OrderWithDetails[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderWithDetails[]>([]);
   const { settings } = useAppSettings();
@@ -95,8 +98,10 @@ export default function DeliveryDashboard() {
   // Phone verification states
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationOtp, setVerificationOtp] = useState('');
-  const [showVerificationInput, setShowVerificationInput] = useState(false);
+  const [profileOtp, setProfileOtp] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
+  const [showVerificationInput, setShowVerificationInput] = useState(false);
+
 
   const fetchData = useCallback(async () => {
     try {
@@ -145,7 +150,8 @@ export default function DeliveryDashboard() {
             ...order,
             customer_profile: customerProfiles.find(p => p.id === order.customer_id) || null
           }));
-          setAvailableOrders(ordersWithProfiles);
+          // Filter out locally passed orders
+          setAvailableOrders(ordersWithProfiles.filter(o => !passedOrderIds.includes(o.id)));
         }
 
         // Fetch my orders with customer info
@@ -198,14 +204,14 @@ export default function DeliveryDashboard() {
 
         const todayEarnings = deliveredOrders
           .filter(o => new Date(o.created_at) >= today)
-          .reduce((sum, o) => sum + (o.delivery_fee || settings.delivery_fee_per_order || 30), 0);
+          .reduce((sum, o) => sum + (Number(o.total_amount) - (o.delivery_fee || settings.delivery_fee_per_order || 25) - 8), 0);
 
         const weekEarnings = deliveredOrders
           .filter(o => new Date(o.created_at) >= weekAgo)
-          .reduce((sum, o) => sum + (o.delivery_fee || settings.delivery_fee_per_order || 30), 0);
+          .reduce((sum, o) => sum + (Number(o.total_amount) - (o.delivery_fee || settings.delivery_fee_per_order || 25) - 8), 0);
 
         const totalEarnings = deliveredOrders.reduce((sum, o) =>
-          sum + (o.delivery_fee || settings.delivery_fee_per_order || 30), 0);
+          sum + (Number(o.total_amount) - (o.delivery_fee || settings.delivery_fee_per_order || 25) - 8), 0);
 
         // Fetch settlements
         const { data: settlementsData } = await supabase
@@ -306,7 +312,27 @@ export default function DeliveryDashboard() {
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     setGeneratedOtp(otp);
     setShowVerificationInput(true);
-    toast.success(`Demo OTP: ${otp} (In production, this would be sent via SMS)`);
+
+    // Save OTP to database for Admin verification
+    const saveOtp = async () => {
+      const { error } = await supabase
+        .from('delivery_partners')
+        .upsert({
+          user_id: user!.id,
+          phone: phoneNumber,
+          verification_otp: otp,
+          phone_verified: false,
+          is_available: false
+        }, { onConflict: 'user_id' });
+
+      if (error) {
+        console.error('Error saving OTP:', error);
+        toast.error('Failed to send OTP to system');
+      } else {
+        toast.success(`OTP sent to Admin! Please contact support to verify.`);
+      }
+    };
+    saveOtp();
   };
 
   const verifyPhoneOtp = () => {
@@ -320,13 +346,13 @@ export default function DeliveryDashboard() {
   const registerAsPartner = async () => {
     const { data, error } = await supabase
       .from('delivery_partners')
-      .insert({
-        user_id: user!.id,
+      .update({
         is_available: false,
         vehicle_type: 'Bike',
         phone: phoneNumber,
         phone_verified: true,
       })
+      .eq('user_id', user!.id)
       .select()
       .single();
 
@@ -339,6 +365,33 @@ export default function DeliveryDashboard() {
       setDeliveryPartner(data);
       setShowRegister(false);
       toast.success('Registered as delivery partner!');
+    }
+  };
+
+  const handleProfileVerification = async () => {
+    if (!deliveryPartner?.verification_otp) {
+      toast.error('No OTP found. Please contact Admin.');
+      return;
+    }
+
+    if (profileOtp === deliveryPartner.verification_otp) {
+      const { error } = await supabase
+        .from('delivery_partners')
+        .update({
+          phone_verified: true,
+          verification_otp: null // Clear OTP after verification
+        })
+        .eq('id', deliveryPartner.id); // verified against own ID
+
+      if (error) {
+        toast.error('Verification failed: ' + error.message);
+      } else {
+        toast.success('Phone verified successfully!');
+        fetchData();
+        setProfileOtp('');
+      }
+    } else {
+      toast.error('Invalid OTP. Please check with Admin.');
     }
   };
 
@@ -468,32 +521,9 @@ export default function DeliveryDashboard() {
     }
   };
 
-  const releaseOrderToPool = async (orderId: string) => {
-    // Use secure RPC to release order back to pool for another partner
-    const { data, error } = await supabase.rpc('release_order_to_pool', {
-      _order_id: orderId
-    });
-
-    if (error) {
-      toast.error('Failed to release order');
-    } else if (data) {
-      toast.success('Order released for another partner');
-      setDeliveryOtpInputs(prev => ({ ...prev, [orderId]: '' }));
-      setDeliveryOtpErrors(prev => ({ ...prev, [orderId]: false }));
-      setPickupOtpInputs(prev => ({ ...prev, [orderId]: '' }));
-      setPickupOtpErrors(prev => ({ ...prev, [orderId]: false }));
-      fetchData();
-    } else {
-      toast.error('Could not release order');
-    }
-  };
 
   if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <GlobalLoading message="Loading delivery dashboard..." />;
   }
 
   if (showRegister) {
@@ -543,10 +573,6 @@ export default function DeliveryDashboard() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="p-3 bg-accent/10 rounded-lg border border-accent/20 text-center">
-                    <p className="text-sm text-accent font-medium">Demo OTP: {generatedOtp}</p>
-                    <p className="text-xs text-muted-foreground mt-1">In production, this would be sent via SMS</p>
-                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="otp">Enter OTP</Label>
                     <Input
@@ -599,6 +625,15 @@ export default function DeliveryDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <Link to="/support">
+                <Button variant="outline" size="sm" className="hidden md:flex gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Support
+                </Button>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  <MessageSquare className="w-5 h-5" />
+                </Button>
+              </Link>
               <Button
                 variant="ghost"
                 size="icon"
@@ -705,6 +740,16 @@ export default function DeliveryDashboard() {
                             </span>
                           )}
                         </span>
+                        <div className="mt-2 pt-2 border-t border-dashed border-border/50 text-xs space-y-1 min-w-[120px]">
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Delivery Fee</span>
+                            <span>₹{currentOrder.delivery_fee || 25}</span>
+                          </div>
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Platform Fee</span>
+                            <span>₹8</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -810,30 +855,6 @@ export default function DeliveryDashboard() {
                               <CheckCircle className="w-4 h-4 mr-2" />
                               Verify & Pickup
                             </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="destructive" size="icon">
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Release Order</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This order will be released back to the pool for another delivery partner to pick up.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => releaseOrderToPool(currentOrder.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  >
-                                    Yes, Release
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
                           </div>
                         </div>
                       )}
@@ -873,30 +894,6 @@ export default function DeliveryDashboard() {
                               <CheckCircle className="w-4 h-4 mr-2" />
                               Verify & Deliver
                             </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="destructive" size="icon">
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Release Order</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This order will be released back to the pool for another delivery partner to pick up.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => releaseOrderToPool(currentOrder.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  >
-                                    Yes, Release
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
                           </div>
                         </div>
                       )}
@@ -906,30 +903,6 @@ export default function DeliveryDashboard() {
                             <Navigation className="w-4 h-4 mr-2" />
                             Start Delivery
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="destructive" size="icon">
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Release Order</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This order will be released back to the pool for another delivery partner to pick up.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => releaseOrderToPool(currentOrder.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Yes, Release
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
                         </div>
                       )}
                     </div>
@@ -990,6 +963,16 @@ export default function DeliveryDashboard() {
                                   </span>
                                 )}
                               </span>
+                              <div className="mt-2 pt-2 border-t border-dashed border-border/50 text-xs space-y-1">
+                                <div className="flex justify-between text-muted-foreground">
+                                  <span>Delivery Fee</span>
+                                  <span>₹{order.delivery_fee || 25}</span>
+                                </div>
+                                <div className="flex justify-between text-muted-foreground">
+                                  <span>Platform Fee</span>
+                                  <span>₹8</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
 
@@ -1031,6 +1014,12 @@ export default function DeliveryDashboard() {
                                     <ExternalLink className="w-3 h-3" />
                                     Map
                                   </a>
+                                  {order.restaurants?.phone && (
+                                    <a href={`tel:${order.restaurants.phone}`} className="flex items-center gap-1 text-primary text-xs hover:underline">
+                                      <Phone className="w-3 h-3" />
+                                      Call Shop
+                                    </a>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1045,7 +1034,8 @@ export default function DeliveryDashboard() {
                             <Button
                               variant="outline"
                               onClick={() => {
-                                // For now rejection just does nothing or could hide it locally
+                                setPassedOrderIds(prev => [...prev, order.id]);
+                                setAvailableOrders(prev => prev.filter(o => o.id !== order.id));
                                 toast.info('Order passed');
                               }}
                             >
@@ -1115,6 +1105,16 @@ export default function DeliveryDashboard() {
                         <div className="text-right">
                           <StatusBadge status={order.status as OrderStatus} />
                           <p className="font-bold text-primary mt-1">₹{Number(order.total_amount).toFixed(2)}</p>
+                          <div className="mt-2 pt-2 border-t border-dashed border-border/50 text-xs space-y-1 min-w-[100px]">
+                            <div className="flex justify-between text-muted-foreground">
+                              <span>Delivery Fee</span>
+                              <span>₹{order.delivery_fee || 25}</span>
+                            </div>
+                            <div className="flex justify-between text-muted-foreground">
+                              <span>Platform Fee</span>
+                              <span>₹8</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1223,23 +1223,7 @@ export default function DeliveryDashboard() {
                   </div>
 
                   {/* Payment breakdown */}
-                  <div className="mt-4 p-4 bg-secondary/50 rounded-lg">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-primary" />
-                      Earnings Breakdown
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Gross earnings</span>
-                        <span>₹{earnings.total}</span>
-                      </div>
-                      <div className="border-t border-border my-2" />
-                      <div className="flex justify-between font-bold">
-                        <span>Net payout</span>
-                        <span className="text-primary">₹{earnings.total}</span>
-                      </div>
-                    </div>
-                  </div>
+
 
                   <p className="text-sm text-muted-foreground text-center mt-4">
                     Settlements are processed every Monday to your registered bank account
@@ -1264,6 +1248,10 @@ export default function DeliveryDashboard() {
                   <span className="font-medium">{profile?.full_name || 'Not set'}</span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-muted-foreground">Partner ID</span>
+                  <span className="font-medium font-mono text-xs">{user?.id}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
                   <span className="text-muted-foreground">Phone</span>
                   <span className="font-medium">{deliveryPartner?.phone || 'Not set'}</span>
                 </div>
@@ -1274,21 +1262,37 @@ export default function DeliveryDashboard() {
                     {deliveryPartner?.vehicle_type || 'Bike'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
-                  <span className="text-muted-foreground">Phone Verified</span>
-                  <span className={`font-medium flex items-center gap-1 ${deliveryPartner?.phone_verified ? 'text-accent' : 'text-destructive'}`}>
-                    {deliveryPartner?.phone_verified ? (
-                      <>
-                        <CheckCircle className="w-4 h-4" />
-                        Verified
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="w-4 h-4" />
-                        Not Verified
-                      </>
-                    )}
-                  </span>
+                <div className="flex justify-between items-start p-3 bg-secondary/50 rounded-lg">
+                  <div className="mt-1">
+                    <span className="text-muted-foreground block mb-1">Phone Verified</span>
+                    <span className={`font-medium flex items-center gap-1 ${deliveryPartner?.phone_verified ? 'text-accent' : 'text-destructive'}`}>
+                      {deliveryPartner?.phone_verified ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          Verified
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-4 h-4" />
+                          Not Verified
+                        </>
+                      )}
+                    </span>
+                  </div>
+
+                  {!deliveryPartner?.phone_verified && (
+                    <div className="flex flex-col gap-2 w-32">
+                      <Input
+                        placeholder="Enter OTP"
+                        className="h-8 text-xs text-center"
+                        value={profileOtp}
+                        onChange={(e) => setProfileOtp(e.target.value)}
+                      />
+                      <Button size="sm" className="h-7 text-xs" onClick={handleProfileVerification}>
+                        Verify
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex justify-between items-center p-3 bg-secondary/50 rounded-lg">
                   <span className="text-muted-foreground">Status</span>
@@ -1427,7 +1431,7 @@ export default function DeliveryDashboard() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }

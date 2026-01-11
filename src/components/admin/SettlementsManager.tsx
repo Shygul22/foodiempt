@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,7 +41,7 @@ export const SettlementsManager = () => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const { toast } = useToast();
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
         try {
             // 1. Fetch all partners
@@ -83,8 +83,13 @@ export const SettlementsManager = () => {
                 const partnerOrders = orders?.filter(o => o.delivery_partner_id === partner.id) || [];
                 const partnerSettlements = settlements?.filter(s => s.delivery_partner_id === partner.id) || [];
 
-                const totalEarnings = partnerOrders.reduce((sum, o) => sum + (o.delivery_fee || 30), 0);
-                const totalSettled = partnerSettlements.reduce((sum, s) => sum + Number(s.amount), 0);
+                const rawEarnings = partnerOrders.reduce((sum, o) => sum + (o.delivery_fee || 30), 0);
+                const rawSettled = partnerSettlements.reduce((sum, s) => sum + Number(s.amount), 0);
+
+                // Round to 2 decimal places to avoid floating point errors
+                const totalEarnings = Number(Math.max(0, rawEarnings).toFixed(2));
+                const totalSettled = Number(rawSettled.toFixed(2));
+                const pendingBalance = Number((totalEarnings - totalSettled).toFixed(2));
 
                 return {
                     partner_id: partner.id,
@@ -92,27 +97,28 @@ export const SettlementsManager = () => {
                     phone: profile?.phone || partner.phone || '-',
                     total_earnings: totalEarnings,
                     total_settled: totalSettled,
-                    pending_balance: totalEarnings - totalSettled
+                    pending_balance: pendingBalance
                 };
             });
 
             setSummaries(summaryList);
 
-        } catch (error: any) {
-            console.error('Error fetching settlement data:', error);
+        } catch (error) {
+            const err = error as Error;
+            console.error('Error fetching settlement data:', err);
             toast({
                 title: "Error loading data",
-                description: error.message || "Failed to load settlement data",
+                description: err.message || "Failed to load settlement data",
                 variant: "destructive"
             });
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [fetchData]);
 
     const handleSettle = async () => {
         if (!selectedPartner || !settleAmount) return;
@@ -194,7 +200,7 @@ export const SettlementsManager = () => {
                                                 setSettleAmount(partner.pending_balance.toString());
                                                 setIsDialogOpen(true);
                                             }}
-                                            disabled={partner.pending_balance <= 0}
+                                            disabled={partner.pending_balance < 1}
                                         >
                                             <DollarSign className="w-4 h-4 mr-1" />
                                             Settle

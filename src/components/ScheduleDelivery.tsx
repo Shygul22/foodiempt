@@ -16,33 +16,74 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Calendar as CalendarIcon, Clock } from 'lucide-react';
-import { format, addDays, setHours, setMinutes, isBefore, startOfDay } from 'date-fns';
+import { format, addDays, setHours, setMinutes, isBefore, startOfDay, isToday, addMinutes } from 'date-fns';
 import { cn } from '@/lib/utils';
+
+interface ScheduleConfig {
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+  maxDays: number;
+}
 
 interface ScheduleDeliveryProps {
   isScheduled: boolean;
   scheduledAt: Date | null;
   onScheduleChange: (isScheduled: boolean, scheduledAt: Date | null) => void;
+  config?: ScheduleConfig;
 }
 
-const timeSlots = [
-  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
-  '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00'
-];
-
-export function ScheduleDelivery({ isScheduled, scheduledAt, onScheduleChange }: ScheduleDeliveryProps) {
+export function ScheduleDelivery({ isScheduled, scheduledAt, onScheduleChange, config }: ScheduleDeliveryProps) {
   const [date, setDate] = useState<Date | undefined>(scheduledAt || undefined);
   const [time, setTime] = useState<string>(scheduledAt ? format(scheduledAt, 'HH:mm') : '12:00');
 
+  // Generate time slots based on config
+  const rawTimeSlots = config ? generateTimeSlots(config.startTime, config.endTime) : [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+    '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00'
+  ];
+
+  // Filter slots if the selected date is Today
+  const timeSlots = date && isToday(date)
+    ? rawTimeSlots.filter(slot => {
+      const [slotHours, slotMinutes] = slot.split(':').map(Number);
+      const now = new Date();
+      const slotDate = setMinutes(setHours(new Date(), slotHours), slotMinutes);
+      // Add a small buffer (e.g. 30 mins) so they can't schedule for 1 minute from now
+      return slotDate > addMinutes(now, 30);
+    })
+    : rawTimeSlots;
+
+  function generateTimeSlots(start: string, end: string) {
+    const slots = [];
+    const [startHour, startMinute] = start.split(':').map(Number);
+    const [endHour, endMinute] = end.split(':').map(Number);
+
+    let current = new Date();
+    current.setHours(startHour, startMinute, 0, 0);
+
+    const endTime = new Date();
+    endTime.setHours(endHour, endMinute, 0, 0);
+
+    while (current <= endTime) {
+      slots.push(format(current, 'HH:mm'));
+      current = new Date(current.getTime() + 30 * 60000); // Add 30 minutes
+    }
+    return slots;
+  }
+
   const handleToggle = (checked: boolean) => {
     if (checked) {
-      const defaultDate = addDays(new Date(), 1);
-      setDate(defaultDate);
-      const [hours, minutes] = time.split(':').map(Number);
-      const scheduled = setMinutes(setHours(defaultDate, hours), minutes);
-      onScheduleChange(true, scheduled);
+      // Default to Today if possible, otherwise Tomorrow
+      const today = new Date();
+      setDate(today);
+
+      // Find first available slot
+      // Logic inside effect or render will handle slot filtering
+      // We just set a default time roughly
+      onScheduleChange(true, today);
     } else {
       onScheduleChange(false, null);
     }

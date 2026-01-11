@@ -4,6 +4,10 @@ const config: CapacitorConfig = {
   appId: 'com.zenjourney.foodie',
   appName: 'Foodie',
   webDir: 'dist',
+  server: {
+    url: 'https://foodiempt.vercel.app',
+    cleartext: true
+  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 3000,

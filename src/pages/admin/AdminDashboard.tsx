@@ -1,7 +1,9 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { GlobalLoading } from '@/components/ui/GlobalLoading';
 import { Restaurant, Order, OrderStatus, DeliveryPartner, AppRole } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,12 +52,27 @@ import {
   Phone,
   IndianRupee,
   Filter,
-  Settings
+  Settings,
+  ShoppingBag,
+  Wallet,
+  FileText,
+  MessageSquare,
+  Star
 } from 'lucide-react';
 import { PromotionsManager } from '@/components/admin/PromotionsManager';
 import { CouponsManager } from '@/components/admin/CouponsManager';
 import { SettlementsManager } from '@/components/admin/SettlementsManager';
-import { toast } from 'sonner';
+import { ShopSettlementsManager } from '@/components/admin/ShopSettlementsManager';
+import { DeliveryPincodesManager } from '@/components/admin/DeliveryPincodesManager';
+import { ScheduleSettings } from '@/components/admin/ScheduleSettings';
+import { AdminOrderCard } from '@/components/admin/AdminOrderCard';
+import { FinancialAnalytics } from '@/components/admin/FinancialAnalytics';
+import { ReportsAnalytics } from '@/components/admin/ReportsAnalytics';
+import { AdminSupport } from '@/components/admin/AdminSupport';
+import {
+  Bell,
+  toast
+} from 'sonner';
 import { format } from 'date-fns';
 
 interface RestaurantWithStats extends Restaurant {
@@ -63,11 +80,30 @@ interface RestaurantWithStats extends Restaurant {
 }
 
 interface OrderWithDetails extends Order {
-  restaurants: { name: string } | null;
+  restaurants: { name: string; address: string; phone: string | null } | null;
+  customer_profile?: { full_name: string | null; phone: string | null } | null;
+  order_items: {
+    quantity: number;
+    menu_item_id: string;
+    menu_items: { name: string; price: number } | null;
+  }[];
 }
 
 interface DeliveryPartnerWithProfile extends DeliveryPartner {
   user_id: string;
+  verification_otp?: string | null;
+  phone_verified?: boolean;
+  profiles?: {
+    full_name: string | null;
+    email: string;
+    phone: string | null;
+  };
+  stats?: {
+    total_deliveries: number;
+    success_rate: number;
+    cancelled: number;
+    avg_rating: number | null;
+  };
 }
 
 interface UserWithRoles {
@@ -112,16 +148,15 @@ export default function AdminDashboard() {
       supabase.from('restaurants').select('*').order('created_at', { ascending: false }),
       supabase
         .from('orders')
-        .select('*, restaurants(name)')
+        .select('*, restaurants(name, address, phone), order_items(quantity, menu_item_id, menu_items(name, price))')
         .order('created_at', { ascending: false })
         .limit(100),
       supabase.from('delivery_partners').select('*'),
-      supabase.from('profiles').select('id, email, full_name').order('created_at', { ascending: false }).limit(100),
+      supabase.from('profiles').select('id, email, full_name, phone').order('created_at', { ascending: false }).limit(200),
       supabase.from('app_settings').select('*'),
     ]);
 
     if (restaurantsRes.data) {
-      // ... (existing stats logic)
       setRestaurants(restaurantsRes.data);
       setStats((prev) => ({
         ...prev,
@@ -130,15 +165,71 @@ export default function AdminDashboard() {
       }));
     }
 
+    if (partnersRes.data) {
+      // Fetch profiles
+      const partnerUserIds = partnersRes.data.map(p => p.user_id);
+      const { data: partnerProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, phone')
+        .in('id', partnerUserIds);
+
+      // Fetch stats (all orders/ratings)
+      const { data: allOrderStats } = await supabase
+        .from('orders')
+        .select('id, status, delivery_partner_id');
+      const { data: allRatings } = await supabase
+        .from('order_ratings')
+        .select('rating, delivery_partner_id');
+
+      const partnersWithData = partnersRes.data.map(partner => {
+        // Profile
+        const profile = partnerProfiles?.find(p => p.id === partner.user_id) || undefined;
+
+        // Stats
+        const pOrders = allOrderStats?.filter(o => o.delivery_partner_id === partner.id) || [];
+        const pDelivered = pOrders.filter(o => o.status === 'delivered');
+        const pCancelled = pOrders.filter(o => o.status === 'cancelled');
+        const pRatings = allRatings?.filter(r => r.delivery_partner_id === partner.id) || [];
+        const avgRating = pRatings.length > 0
+          ? pRatings.reduce((sum, r) => sum + r.rating, 0) / pRatings.length
+          : null;
+
+        return {
+          ...partner,
+          profiles: profile,
+          stats: {
+            total_deliveries: pDelivered.length,
+            success_rate: pOrders.length > 0 ? Math.round((pDelivered.length / pOrders.length) * 100) : 0,
+            cancelled: pCancelled.length,
+            avg_rating: avgRating
+          }
+        };
+      });
+
+      setDeliveryPartners(partnersWithData);
+      setStats((prev) => ({
+        ...prev,
+        totalPartners: partnersRes.data.length,
+      }));
+    }
+
     if (ordersRes.data) {
-      setOrders(ordersRes.data);
+      // Manually join customer profiles to orders since DB join is not available via FK
+      const enrichedOrders = ordersRes.data.map(order => {
+        const customerProfile = profilesRes.data?.find(p => p.id === order.customer_id);
+        return {
+          ...order,
+          customer_profile: customerProfile ? { full_name: customerProfile.full_name, phone: customerProfile.phone } : null
+        };
+      });
+      setOrders(enrichedOrders);
       const activeOrders = ordersRes.data.filter(o =>
         !['delivered', 'cancelled'].includes(o.status)
       ).length;
-      const totalRevenue = ordersRes.data.reduce(
-        (sum, order) => sum + Number(order.total_amount),
-        0
-      );
+      const totalRevenue = ordersRes.data
+        .filter(o => o.status === 'delivered')
+        .reduce((sum, order) => sum + Number(order.total_amount), 0);
+
       // Calculate delivery fee and platform fee earnings (from delivered orders only)
       const deliveredOrders = ordersRes.data.filter(o => o.status === 'delivered');
       const deliveryFeeEarnings = deliveredOrders.reduce(
@@ -147,6 +238,7 @@ export default function AdminDashboard() {
       );
       const platformFee = 8; // Fixed platform fee per order
       const platformFeeEarnings = deliveredOrders.length * platformFee;
+
       setStats((prev) => ({
         ...prev,
         totalOrders: ordersRes.data.length,
@@ -154,14 +246,6 @@ export default function AdminDashboard() {
         activeOrders,
         deliveryFeeEarnings,
         platformFeeEarnings,
-      }));
-    }
-
-    if (partnersRes.data) {
-      setDeliveryPartners(partnersRes.data);
-      setStats((prev) => ({
-        ...prev,
-        totalPartners: partnersRes.data.length,
       }));
     }
 
@@ -359,11 +443,7 @@ export default function AdminDashboard() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <GlobalLoading message="Loading admin dashboard..." />;
   }
 
   return (
@@ -388,15 +468,23 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="h-9 w-9"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Link to="/admin/support">
+                <Button variant="outline" size="sm" className="hidden md:flex gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Support
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="h-9 w-9"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -518,7 +606,7 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="shops" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="flex flex-wrap h-auto gap-2 p-2 bg-muted/50">
             <TabsTrigger value="shops" className="gap-1 text-xs">
               <Store className="w-4 h-4" />
               <span className="hidden sm:inline">Shops</span>
@@ -543,11 +631,23 @@ export default function AdminDashboard() {
               <Tag className="w-4 h-4" />
               <span className="hidden sm:inline">Coupons</span>
             </TabsTrigger>
-            <TabsTrigger value="settlements" className="gap-1 text-xs">
-              <DollarSign className="w-4 h-4" />
+            <TabsTrigger value="settlements" className="gap-2 text-xs">
+              <IndianRupee className="w-4 h-4" />
               <span className="hidden sm:inline">Settlements</span>
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-1 text-xs">
+            <TabsTrigger value="reports" className="gap-2 text-xs">
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">Reports</span>
+            </TabsTrigger>
+            <TabsTrigger value="financials" className="gap-2 text-xs">
+              <TrendingUp className="w-4 h-4" />
+              <span className="hidden sm:inline">Financials</span>
+            </TabsTrigger>
+            <TabsTrigger value="delivery-areas" className="gap-1 text-xs">
+              <MapPin className="w-4 h-4" />
+              <span className="hidden sm:inline">Areas</span>
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2 text-xs">
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>
@@ -601,30 +701,38 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
-                          <Input
-                            type="number"
-                            placeholder={`${restaurant.commission_rate}%`}
-                            value={commissionUpdates[restaurant.id] || ''}
-                            onChange={(e) => setCommissionUpdates((prev) => ({
-                              ...prev,
-                              [restaurant.id]: e.target.value,
-                            }))}
-                            className="w-20 h-8 text-sm"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => updateCommission(restaurant.id)}
-                            disabled={!commissionUpdates[restaurant.id]}
-                            className="h-8"
-                          >
-                            <Percent className="w-3 h-3 mr-1" />
-                            Set
-                          </Button>
-                          <span className="text-xs text-muted-foreground ml-auto">
-                            Current: {restaurant.commission_rate}%
-                          </span>
+                        <div className="mt-4 pt-3 border-t border-border/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-muted-foreground">Commission Rate</span>
+                            <span className="text-xs font-bold bg-secondary px-2 py-0.5 rounded text-secondary-foreground">
+                              {restaurant.commission_rate}%
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                              <Input
+                                type="number"
+                                placeholder="New rate"
+                                value={commissionUpdates[restaurant.id] || ''}
+                                onChange={(e) => setCommissionUpdates((prev) => ({
+                                  ...prev,
+                                  [restaurant.id]: e.target.value,
+                                }))}
+                                className="h-8 text-sm pr-6"
+                                min="0"
+                                max="100"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => updateCommission(restaurant.id)}
+                              disabled={!commissionUpdates[restaurant.id]}
+                              className="h-8"
+                            >
+                              Set
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -632,6 +740,18 @@ export default function AdminDashboard() {
                 </ScrollArea>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="delivery-areas">
+            <DeliveryPincodesManager />
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <ReportsAnalytics />
+          </TabsContent>
+
+          <TabsContent value="financials">
+            <FinancialAnalytics />
           </TabsContent>
 
           <TabsContent value="orders">
@@ -676,53 +796,12 @@ export default function AdminDashboard() {
                 <ScrollArea className="h-[500px]">
                   <div className="p-4 space-y-3">
                     {filteredOrders.map((order) => (
-                      <div
+                      <AdminOrderCard
                         key={order.id}
-                        className="p-3 rounded-xl border border-border bg-card hover:bg-secondary/30 transition-all"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-sm font-medium">#{order.id.slice(0, 8)}</span>
-                              <StatusBadge status={order.status as OrderStatus} />
-                            </div>
-                            <p className="text-sm mt-1">{order.restaurants?.name || 'Unknown'}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {format(new Date(order.created_at), 'MMM d, h:mm a')}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-primary">₹{Number(order.total_amount).toFixed(0)}</p>
-                            {!['delivered', 'cancelled'].includes(order.status) && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive mt-1">
-                                    <X className="w-3 h-3 mr-1" />
-                                    Cancel
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Cancel Order</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to cancel this order? This cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Keep</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => cancelOrder(order.id)}
-                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                    >
-                                      Cancel Order
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                        order={order}
+                        deliveryPartners={deliveryPartners}
+                        onCancel={cancelOrder}
+                      />
                     ))}
                   </div>
                 </ScrollArea>
@@ -752,7 +831,9 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold">Partner #{partner.id.slice(0, 6)}</p>
+                            <p className="text-sm font-semibold">
+                              {partner.profiles?.full_name || partner.profiles?.email || `Partner #${partner.id.slice(0, 6)}`}
+                            </p>
                             <span className={`text-xs px-2 py-0.5 rounded-full ${partner.is_available
                               ? 'bg-accent/20 text-accent'
                               : 'bg-muted text-muted-foreground'
@@ -775,9 +856,37 @@ export default function AdminDashboard() {
                               {partner.vehicle_type}
                             </p>
                           )}
+                          {!partner.phone_verified && partner.verification_otp && (
+                            <p className="text-xs font-bold text-orange-500 mt-1 flex items-center gap-1">
+                              <Shield className="w-3 h-3" />
+                              OTP: {partner.verification_otp}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground mt-1">
                             Joined: {format(new Date(partner.created_at), 'MMM d, yyyy')}
                           </p>
+                          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/50">
+                            <div className="text-center p-1.5 bg-secondary/30 rounded">
+                              <p className="text-[10px] text-muted-foreground uppercase">Deliveries</p>
+                              <p className="font-bold text-sm">{partner.stats?.total_deliveries || 0}</p>
+                            </div>
+                            <div className="text-center p-1.5 bg-secondary/30 rounded">
+                              <p className="text-[10px] text-muted-foreground uppercase">Success</p>
+                              <p className="font-bold text-sm text-accent">{partner.stats?.success_rate || 0}%</p>
+                            </div>
+                            <div className="text-center p-1.5 bg-secondary/30 rounded">
+                              <p className="text-[10px] text-muted-foreground uppercase">Cancelled</p>
+                              <p className="font-bold text-sm text-destructive">{partner.stats?.cancelled || 0}</p>
+                            </div>
+                            <div className="text-center p-1.5 bg-secondary/30 rounded">
+                              <p className="text-[10px] text-muted-foreground uppercase">Rating</p>
+                              <div className="flex items-center justify-center gap-0.5 font-bold text-sm">
+                                <span>{partner.stats?.avg_rating?.toFixed(1) || '—'}</span>
+                                <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                              </div>
+                            </div>
+                          </div>
+
                         </div>
                       </div>
                     </div>
@@ -858,6 +967,7 @@ export default function AdminDashboard() {
                               <SelectItem value="super_admin">Super Admin</SelectItem>
                               <SelectItem value="restaurant_owner">Restaurant Owner</SelectItem>
                               <SelectItem value="delivery_partner">Delivery Partner</SelectItem>
+                              <SelectItem value="support_agent">Support Agent</SelectItem>
                               <SelectItem value="customer">Customer</SelectItem>
                             </SelectContent>
                           </Select>
@@ -888,79 +998,108 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="settlements">
-            <SettlementsManager />
+            <Tabs defaultValue="partners" className="w-full">
+              <div className="flex items-center gap-4 mb-4">
+                <TabsList>
+                  <TabsTrigger value="partners" className="flex items-center gap-2">
+                    <Bike className="h-4 w-4" />
+                    Delivery Partners
+                  </TabsTrigger>
+                  <TabsTrigger value="shops" className="flex items-center gap-2">
+                    <Store className="h-4 w-4" />
+                    Restaurants
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="partners" className="m-0">
+                <SettlementsManager />
+              </TabsContent>
+              <TabsContent value="shops" className="m-0">
+                <ShopSettlementsManager />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
           <TabsContent value="settings">
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Settings className="w-5 h-5 text-primary" />
-                  System Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between p-4 border rounded-xl bg-card">
-                  <div className="space-y-0.5">
-                    <h4 className="font-semibold text-base">Phone Login</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Enable or disable phone number authentication.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={enablePhoneLogin}
-                    onCheckedChange={(checked) => updateSetting('enable_phone_login', checked)}
-                  />
-                </div>
+            <ScheduleSettings />
 
-                <div className="p-4 border rounded-xl bg-card space-y-4">
-                  <h4 className="font-semibold text-base">Settlement Configuration</h4>
+            {/* Keeping existing settings in a separate card below if needed, or we can merge them into ScheduleSettings later.
+                For now, let's keep the existing "System Settings" card below the Schedule Settings so we don't lose that functionality (Phone Login, Delivery Fee etc)
+                Actually, the user asked for "Schedule... time fix to admin", so I should prioritize the schedule settings.
+                I'll render the new component first.
+            */}
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Delivery Fee per Order (₹)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          value={deliveryFee}
-                          onChange={(e) => setDeliveryFee(e.target.value)}
-                          placeholder="30"
-                        />
-                        <Button
-                          variant="secondary"
-                          onClick={() => updateSetting('delivery_fee_per_order', Number(deliveryFee))}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Amount paid to partner per delivery.
+            <div className="mt-6">
+              <Card className="border-0 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Settings className="w-5 h-5 text-primary" />
+                    General Settings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-center justify-between p-4 border rounded-xl bg-card">
+                    <div className="space-y-0.5">
+                      <h4 className="font-semibold text-base">Phone Login</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Enable or disable phone number authentication.
                       </p>
                     </div>
+                    <Switch
+                      checked={enablePhoneLogin}
+                      onCheckedChange={(checked) => updateSetting('enable_phone_login', checked)}
+                    />
+                  </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Pending Settlement (%)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          value={settlementPercent}
-                          onChange={(e) => setSettlementPercent(e.target.value)}
-                          placeholder="20"
-                        />
-                        <Button
-                          variant="secondary"
-                          onClick={() => updateSetting('pending_settlement_percentage', Number(settlementPercent))}
-                        >
-                          Save
-                        </Button>
+                  <div className="p-4 border rounded-xl bg-card space-y-4">
+                    <h4 className="font-semibold text-base">Settlement Configuration</h4>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Delivery Fee per Order (₹)</label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            value={deliveryFee}
+                            onChange={(e) => setDeliveryFee(e.target.value)}
+                            placeholder="30"
+                          />
+                          <Button
+                            variant="secondary"
+                            onClick={() => updateSetting('delivery_fee_per_order', Number(deliveryFee))}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Amount paid to partner per delivery.
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Percentage of earnings held for later settlement.
-                      </p>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Pending Settlement (%)</label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            value={settlementPercent}
+                            onChange={(e) => setSettlementPercent(e.target.value)}
+                            placeholder="20"
+                          />
+                          <Button
+                            variant="secondary"
+                            onClick={() => updateSetting('pending_settlement_percentage', Number(settlementPercent))}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Percentage of earnings held for later settlement.
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

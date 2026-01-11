@@ -1,4 +1,4 @@
-import { Home, Search, ShoppingBag, User, Compass } from "lucide-react";
+import { Home, Search, ShoppingBag, User, Compass, MessageSquare } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useHaptics } from "@/hooks/useHaptics";
@@ -36,6 +36,11 @@ const BottomNav = () => {
             icon: User,
             label: "Profile",
             path: "/profile",
+        },
+        {
+            icon: MessageSquare,
+            label: "Support",
+            path: "/support",
         },
     ];
 

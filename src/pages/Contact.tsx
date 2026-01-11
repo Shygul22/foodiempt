@@ -5,12 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { 
-  ArrowLeft, 
-  Phone, 
-  Mail, 
-  MessageCircle, 
-  Clock, 
+import {
+  ArrowLeft,
+  Phone,
+  Mail,
+  MessageCircle,
+  Clock,
   MapPin,
   Send,
   Headphones,
@@ -35,10 +35,10 @@ export default function Contact() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
     setIsSubmitting(false);
     setSubmitted(true);
     toast.success('Your message has been sent! We\'ll get back to you soon.');
@@ -51,23 +51,23 @@ export default function Contact() {
   ];
 
   const contactMethods = [
-    { 
-      icon: Phone, 
-      title: 'Phone Support', 
+    {
+      icon: Phone,
+      title: 'Phone Support',
       value: '+91 1800-123-4567',
       desc: 'Toll-free number',
       action: 'tel:+911800123456'
     },
-    { 
-      icon: Mail, 
-      title: 'Email Support', 
-      value: 'support@deliveryapp.com',
+    {
+      icon: Mail,
+      title: 'Email Support',
+      value: 'support@zenjourney.in',
       desc: 'Get response within 24 hrs',
-      action: 'mailto:support@deliveryapp.com'
+      action: 'mailto:support@zenjourney.in'
     },
-    { 
-      icon: MessageCircle, 
-      title: 'WhatsApp', 
+    {
+      icon: MessageCircle,
+      title: 'WhatsApp',
       value: '+91 98765-43210',
       desc: 'Chat with us',
       action: 'https://wa.me/919876543210'

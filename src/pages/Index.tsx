@@ -12,6 +12,7 @@ import { useCartStore } from '@/stores/cartStore';
 import { FavouriteButton } from '@/components/FavouriteButton';
 import { LocationHeader } from '@/components/LocationHeader';
 import { AIRecommendations } from '@/components/AIRecommendations';
+import { RestaurantDeliveryAreas } from '@/components/restaurant/RestaurantDeliveryAreas';
 import {
   Search,
   MapPin,
@@ -28,7 +29,8 @@ import {
   TrendingUp,
   User,
   Gift,
-  Headphones
+  Headphones,
+  MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,8 +41,11 @@ export default function Index() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'favourites'>('all');
   const [loading, setLoading] = useState(true);
+  const [deliveryPincodes, setDeliveryPincodes] = useState<Record<string, string[]>>({});
   const { deliveryAddress, setDeliveryAddress } = useCartStore();
   const cartItems = useCartStore((state) => state.getTotalItems());
+
+  const currentPincode = deliveryAddress.match(/\b\d{6}\b/)?.[0];
 
   const fetchRestaurants = useCallback(async () => {
     const { data, error } = await supabase
@@ -70,9 +75,28 @@ export default function Index() {
     }
   }, [user]);
 
+  const fetchDeliveryPincodes = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('restaurant_delivery_pincodes')
+      .select('restaurant_id, pincode')
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('Error fetching delivery pincodes:', error);
+    } else if (data) {
+      const mapping: Record<string, string[]> = {};
+      data.forEach(item => {
+        if (!mapping[item.restaurant_id]) mapping[item.restaurant_id] = [];
+        mapping[item.restaurant_id].push(item.pincode);
+      });
+      setDeliveryPincodes(mapping);
+    }
+  }, []);
+
   useEffect(() => {
     fetchRestaurants();
-  }, [fetchRestaurants]);
+    fetchDeliveryPincodes();
+  }, [fetchRestaurants, fetchDeliveryPincodes]);
 
   useEffect(() => {
     if (user) {
@@ -89,7 +113,12 @@ export default function Index() {
       activeTab === 'all' ||
       favouriteIds.includes(restaurant.id);
 
-    return matchesSearch && matchesFavourites;
+    const pincodesForRestaurant = deliveryPincodes[restaurant.id] || [];
+    const matchesPincode = !currentPincode ||
+      pincodesForRestaurant.length === 0 ||
+      pincodesForRestaurant.includes(currentPincode);
+
+    return matchesSearch && matchesFavourites && matchesPincode;
   });
 
 
@@ -137,6 +166,13 @@ export default function Index() {
                       </Button>
                     </Link>
                   )}
+                  {hasRole('support_agent') && (
+                    <Link to="/staff/support" className="hidden md:block">
+                      <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-500" title="Support Panel">
+                        <Shield className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  )}
                   {hasRole('delivery_partner') && (
                     <Link to="/delivery" className="hidden md:block">
                       <Button variant="ghost" size="icon" className="h-9 w-9">
@@ -145,13 +181,13 @@ export default function Index() {
                     </Link>
                   )}
 
-                  <Link to="/orders">
+                  <Link to="/orders" className="hidden md:block">
                     <Button variant="ghost" size="sm" className="hidden sm:flex text-xs h-9">
                       Orders
                     </Button>
                   </Link>
 
-                  <Link to="/cart" className="relative">
+                  <Link to="/cart" className="relative hidden md:block">
                     <Button variant="default" size="sm" className="h-9 gap-1.5 rounded-full px-3">
                       <ShoppingCart className="w-4 h-4" />
                       {cartItems > 0 && (
@@ -160,8 +196,14 @@ export default function Index() {
                     </Button>
                   </Link>
 
-                  <Link to="/profile">
-                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <Link to="/support" className="hidden md:block">
+                    <Button variant="ghost" size="icon" className="h-9 w-9" title="Support">
+                      <MessageSquare className="w-4 h-4" />
+                    </Button>
+                  </Link>
+
+                  <Link to="/profile" className="hidden md:block">
+                    <Button variant="ghost" size="icon" className="h-9 w-9" title="Profile">
                       <User className="w-4 h-4" />
                     </Button>
                   </Link>
@@ -349,6 +391,12 @@ export default function Index() {
                           {restaurant.category || 'food'}
                         </span>
                       </div>
+                      <div className="mt-2 pt-2 border-t border-dashed">
+                        <RestaurantDeliveryAreas
+                          restaurantId={restaurant.id}
+                          className="text-[10px]"
+                        />
+                      </div>
                     </CardContent>
                   </Card>
                 </Link>
@@ -393,7 +441,7 @@ export default function Index() {
             </Link>
           </div>
           <p className="text-center text-xs text-muted-foreground mt-4">
-            © 2026 DeliveryApp. All rights reserved.
+            © 2026 ZenJourney. All rights reserved.
           </p>
         </div>
       </footer>

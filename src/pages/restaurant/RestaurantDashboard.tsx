@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { GlobalLoading } from '@/components/ui/GlobalLoading';
 import { Restaurant, MenuItem, Order, OrderStatus } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,15 +50,18 @@ import {
   RefreshCw,
   Search,
   Bike,
-  Percent
+  Percent,
+  MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useRestaurantOrderNotifications } from '@/hooks/useOrderNotifications';
+import { RestaurantDeliveryPincodesManager } from '@/components/restaurant/RestaurantDeliveryPincodesManager';
 
 interface OrderWithItems extends Order {
   order_items: { quantity: number; unit_price: number; menu_items: { name: string } | null }[];
   customer_profile?: { full_name: string | null; phone: string | null } | null;
+  delivery_partner_profile?: { full_name: string | null; phone: string | null } | null;
 }
 
 // Helper to generate short order ID
@@ -75,7 +79,8 @@ export default function RestaurantDashboard() {
   const [earnings, setEarnings] = useState({
     today: 0, week: 0, total: 0, orderCount: 0,
     grossToday: 0, grossWeek: 0, grossTotal: 0,
-    deliveryFees: 0, platformFees: 0, commission: 0
+    deliveryFees: 0, platformFees: 0, commission: 0,
+    pendingBalance: 0 // New field
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -95,6 +100,8 @@ export default function RestaurantDashboard() {
     image_url: '',
     lat: '',
     lng: '',
+    pincode: '',
+    locality: '',
   });
   const [detectingLocation, setDetectingLocation] = useState(false);
 
@@ -106,6 +113,8 @@ export default function RestaurantDashboard() {
     image_url: '',
   });
 
+  // ... (existing state)
+
   const fetchData = useCallback(async () => {
     // Fetch restaurant owned by user
     const { data: restaurantData } = await supabase
@@ -115,9 +124,9 @@ export default function RestaurantDashboard() {
       .maybeSingle();
 
     if (restaurantData) {
-      setRestaurant(restaurantData);
+      setRestaurant(restaurantData as unknown as Restaurant);
 
-      // Fetch menu items
+      // Fetch menu items...
       const { data: menuData } = await supabase
         .from('menu_items')
         .select('*')
@@ -126,7 +135,7 @@ export default function RestaurantDashboard() {
 
       if (menuData) setMenuItems(menuData);
 
-      // Fetch active orders
+      // Fetch active orders...
       const { data: ordersData } = await supabase
         .from('orders')
         .select('*, order_items(quantity, unit_price, menu_items(name))')
@@ -135,7 +144,7 @@ export default function RestaurantDashboard() {
         .order('created_at', { ascending: false })
         .limit(50);
 
-      // Fetch order history (delivered/cancelled)
+      // Fetch order history...
       const { data: historyData } = await supabase
         .from('orders')
         .select('*, order_items(quantity, unit_price, menu_items(name))')
@@ -144,17 +153,28 @@ export default function RestaurantDashboard() {
         .order('created_at', { ascending: false })
         .limit(50);
 
+      // Fetch settlements for this restaurant
+      const { data: settlementsData } = await supabase
+        .from('settlements')
+        .select('amount')
+        .eq('restaurant_id', restaurantData.id);
+
       const allOrders = [...(ordersData || []), ...(historyData || [])];
+      // ... (profile processing remains same)
       const customerIds = allOrders.map(o => o.customer_id);
-      const { data: customerProfiles } = await supabase
+      const deliveryPartnerIds = allOrders.map(o => o.delivery_partner_id).filter(Boolean) as string[];
+      const profileIds = [...new Set([...customerIds, ...deliveryPartnerIds])];
+      const { data: profiles } = await supabase
         .from('profiles')
         .select('id, full_name, phone')
-        .in('id', customerIds);
+        .in('id', profileIds);
+
 
       if (ordersData) {
         const ordersWithProfiles = ordersData.map(order => ({
           ...order,
-          customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
+          customer_profile: profiles?.find(p => p.id === order.customer_id) || null,
+          delivery_partner_profile: profiles?.find(p => p.id === order.delivery_partner_id) || null
         }));
         setOrders(ordersWithProfiles as OrderWithItems[]);
       }
@@ -162,22 +182,22 @@ export default function RestaurantDashboard() {
       if (historyData) {
         const historyWithProfiles = historyData.map(order => ({
           ...order,
-          customer_profile: customerProfiles?.find(p => p.id === order.customer_id) || null
+          customer_profile: profiles?.find(p => p.id === order.customer_id) || null,
+          delivery_partner_profile: profiles?.find(p => p.id === order.delivery_partner_id) || null
         }));
         setOrderHistory(historyWithProfiles as OrderWithItems[]);
 
-        // Calculate earnings - EXCLUDE delivery fee and platform fee
+        // Calculate earnings
         const deliveredOrders = historyData.filter(o => o.status === 'delivered');
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const weekAgo = new Date(today);
         weekAgo.setDate(weekAgo.getDate() - 7);
 
-        const platformFee = 8; // Fixed platform fee per order
-        const deliveryFee = 25; // Default delivery fee per order
+        const platformFee = 8;
+        const deliveryFee = 25;
         const commissionRate = restaurantData.commission_rate || 15;
 
-        // Calculate per-order shop earnings (total - delivery - platform - commission)
         const calculateShopEarnings = (order: OrderWithItems) => {
           const orderDeliveryFee = Number(order.delivery_fee || deliveryFee);
           const subtotal = Number(order.total_amount) - orderDeliveryFee - platformFee;
@@ -204,6 +224,10 @@ export default function RestaurantDashboard() {
           return sum + (subtotal * commissionRate) / 100;
         }, 0);
 
+        // Calculate Settlements
+        const totalSettled = (settlementsData || []).reduce((sum, s) => sum + Number(s.amount), 0);
+        const pendingBalance = Math.max(0, totalShopEarnings - totalSettled);
+
         setEarnings({
           today: todayShopEarnings,
           week: weekShopEarnings,
@@ -214,7 +238,8 @@ export default function RestaurantDashboard() {
           grossTotal,
           deliveryFees: totalDeliveryFees,
           platformFees: totalPlatformFees,
-          commission: totalCommission
+          commission: totalCommission,
+          pendingBalance
         });
       }
     } else {
@@ -234,6 +259,17 @@ export default function RestaurantDashboard() {
           event: '*',
           schema: 'public',
           table: 'orders',
+        },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'settlements',
         },
         () => {
           fetchData();
@@ -303,6 +339,7 @@ export default function RestaurantDashboard() {
         image_url: restaurantForm.image_url || null,
         lat: restaurantForm.lat ? parseFloat(restaurantForm.lat) : null,
         lng: restaurantForm.lng ? parseFloat(restaurantForm.lng) : null,
+        pincode: restaurantForm.pincode || null,
       })
       .select()
       .single();
@@ -313,7 +350,7 @@ export default function RestaurantDashboard() {
       // Use secure RPC to assign restaurant_owner role
       await supabase.rpc('request_restaurant_owner_role');
 
-      setRestaurant(data);
+      setRestaurant(data as unknown as Restaurant);
       setShowCreateRestaurant(false);
       toast.success('Shop created! Awaiting admin verification.');
     }
@@ -352,6 +389,8 @@ export default function RestaurantDashboard() {
       .update({
         lat: restaurantForm.lat ? parseFloat(restaurantForm.lat) : null,
         lng: restaurantForm.lng ? parseFloat(restaurantForm.lng) : null,
+        pincode: restaurantForm.pincode || null,
+        locality: restaurantForm.locality || null,
       })
       .eq('id', restaurant.id);
 
@@ -362,8 +401,10 @@ export default function RestaurantDashboard() {
         ...prev,
         lat: restaurantForm.lat ? parseFloat(restaurantForm.lat) : null,
         lng: restaurantForm.lng ? parseFloat(restaurantForm.lng) : null,
+        pincode: restaurantForm.pincode || null,
+        locality: restaurantForm.locality || null,
       } : null);
-      toast.success('Shop location updated!');
+      toast.success('Shop details updated!');
     }
   };
 
@@ -481,12 +522,8 @@ export default function RestaurantDashboard() {
     }
   };
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+  if (loading) {
+    return <GlobalLoading message="Loading dashboard..." />;
   }
 
   // Show create restaurant form
@@ -552,13 +589,23 @@ export default function RestaurantDashboard() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Image URL</Label>
-                <Input
-                  value={restaurantForm.image_url}
-                  onChange={(e) => setRestaurantForm({ ...restaurantForm, image_url: e.target.value })}
-                  placeholder="https://..."
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Image URL</Label>
+                  <Input
+                    value={restaurantForm.image_url}
+                    onChange={(e) => setRestaurantForm({ ...restaurantForm, image_url: e.target.value })}
+                    placeholder="https://..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Pincode *</Label>
+                  <Input
+                    value={restaurantForm.pincode}
+                    onChange={(e) => setRestaurantForm({ ...restaurantForm, pincode: e.target.value })}
+                    placeholder="560001"
+                  />
+                </div>
               </div>
 
               {/* Location Section */}
@@ -623,7 +670,7 @@ export default function RestaurantDashboard() {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </div >
     );
   }
 
@@ -644,6 +691,15 @@ export default function RestaurantDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <Link to="/support">
+                <Button variant="outline" size="sm" className="hidden md:flex gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Support
+                </Button>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  <MessageSquare className="w-5 h-5" />
+                </Button>
+              </Link>
               <Button
                 variant="ghost"
                 size="icon"
@@ -691,9 +747,9 @@ export default function RestaurantDashboard() {
               <History className="w-4 h-4" />
               <span className="hidden sm:inline">History</span>
             </TabsTrigger>
-            <TabsTrigger value="earnings" className="gap-2">
-              <Wallet className="w-4 h-4" />
-              <span className="hidden sm:inline">Earnings</span>
+            <TabsTrigger value="financials" className="gap-2">
+              <Banknote className="w-4 h-4" />
+              <span className="hidden sm:inline">Financials</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="gap-2">
               <Settings className="w-4 h-4" />
@@ -857,6 +913,33 @@ export default function RestaurantDashboard() {
                           )}
                         </div>
                       </div>
+
+
+                      {/* Delivery Partner Info */}
+                      {order.status !== 'pending' && order.status !== 'confirmed' && order.delivery_partner_profile && (
+                        <div className="mt-3 p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Bike className="w-4 h-4 text-blue-600" />
+                                <span className="text-sm font-medium text-blue-600">Delivery Partner</span>
+                              </div>
+                              <p className="text-sm font-bold mt-1 text-foreground">
+                                {order.delivery_partner_profile.full_name || 'Assigned'}
+                              </p>
+                            </div>
+                            {order.delivery_partner_profile.phone && (
+                              <a
+                                href={`tel:${order.delivery_partner_profile.phone}`}
+                                className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                              >
+                                <Phone className="w-3 h-3" />
+                                Call
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Show Pickup OTP when ready for pickup */}
                       {order.status === 'ready_for_pickup' && order.pickup_otp && (
@@ -1112,199 +1195,87 @@ export default function RestaurantDashboard() {
             )}
           </TabsContent>
 
-          {/* Earnings Tab */}
-          <TabsContent value="earnings" className="space-y-6">
-            {/* Net Earnings Cards */}
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Your Net Earnings</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <Card className="border-0 shadow-sm bg-gradient-to-br from-accent/5 to-accent/10">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
-                        <IndianRupee className="w-5 h-5 text-accent" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Today</p>
-                        <p className="text-2xl font-bold text-accent">₹{earnings.today.toFixed(0)}</p>
-                      </div>
+          {/* Financials Tab */}
+          <TabsContent value="financials" className="space-y-6">
+
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Income Breakdown */}
+              <Card className="border-0 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">Transaction Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between items-center p-2 bg-secondary/30 rounded-lg">
+                      <span className="text-muted-foreground">Gross Sales (Total Value)</span>
+                      <span className="font-bold">₹{earnings.grossTotal.toFixed(2)}</span>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-0 shadow-sm bg-gradient-to-br from-primary/5 to-primary/10">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                        <TrendingUp className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">This Week</p>
-                        <p className="text-2xl font-bold text-primary">₹{earnings.week.toFixed(0)}</p>
-                      </div>
+                    <div className="flex justify-between items-center p-2">
+                      <span className="text-muted-foreground">Total Orders</span>
+                      <span className="font-medium">{earnings.orderCount}</span>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-0 shadow-sm bg-gradient-to-br from-status-delivered/5 to-status-delivered/10">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-status-delivered/20 flex items-center justify-center">
-                        <Wallet className="w-5 h-5 text-status-delivered" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Total Net Earnings</p>
-                        <p className="text-2xl font-bold text-status-delivered">₹{earnings.total.toFixed(0)}</p>
-                      </div>
+                    <div className="flex justify-between items-center p-2">
+                      <span className="text-muted-foreground">Avg. Order Value</span>
+                      <span className="font-medium">
+                        ₹{earnings.orderCount > 0 ? (earnings.grossTotal / earnings.orderCount).toFixed(0) : '0'}
+                      </span>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-0 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-                        <Package className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Orders Delivered</p>
-                        <p className="text-2xl font-bold">{earnings.orderCount}</p>
-                      </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Balance Sheet */}
+              <Card className="border-0 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">Balance Sheet</CardTitle>
+                  <p className="text-xs text-muted-foreground">Credits vs Debits</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between items-center text-status-delivered">
+                      <span>Total Credits (Gross)</span>
+                      <span className="font-bold">+₹{earnings.grossTotal.toFixed(2)}</span>
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
+
+                    <div className="border-t border-dashed border-border my-2"></div>
+
+                    <div className="flex justify-between items-center text-status-cancelled">
+                      <span>Platform Fees (Debit)</span>
+                      <span>-₹{earnings.platformFees.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-status-cancelled">
+                      <span>Delivery Fees (Debit)</span>
+                      <span>-₹{earnings.deliveryFees.toFixed(2)}</span>
+                    </div>
+
+
+                    <div className="border-t border-border my-2"></div>
+
+                    <div className="flex justify-between items-center font-bold text-lg">
+                      <span>Net Payout</span>
+                      <span className="text-primary">₹{earnings.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-accent/10 rounded-lg border border-accent/20">
+                    <div className="flex justify-between items-center">
+                      <span className="text-accent font-medium">Pending Release</span>
+                      <span className="text-accent font-bold text-lg">₹{earnings.pendingBalance.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-
-            {/* Settlement Breakdown */}
-            <Card className="border-0 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <IndianRupee className="w-4 h-4" />
-                  Settlement Breakdown
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Gross Order Value</span>
-                  <span className="font-bold">₹{earnings.grossTotal.toFixed(0)}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-destructive/5 rounded-lg border border-destructive/10">
-                  <span className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Bike className="w-4 h-4" />
-                    Delivery Fees (Platform)
-                  </span>
-                  <span className="font-medium text-destructive">- ₹{earnings.deliveryFees.toFixed(0)}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-destructive/5 rounded-lg border border-destructive/10">
-                  <span className="text-sm text-muted-foreground flex items-center gap-2">
-                    <IndianRupee className="w-4 h-4" />
-                    Platform Fees (₹8/order)
-                  </span>
-                  <span className="font-medium text-destructive">- ₹{earnings.platformFees.toFixed(0)}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-destructive/5 rounded-lg border border-destructive/10">
-                  <span className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Percent className="w-4 h-4" />
-                    Commission ({restaurant?.commission_rate || 15}%)
-                  </span>
-                  <span className="font-medium text-destructive">- ₹{earnings.commission.toFixed(0)}</span>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-accent/10 rounded-lg border border-accent/20">
-                  <span className="text-sm font-semibold text-accent">Your Net Earnings</span>
-                  <span className="font-bold text-lg text-accent">₹{earnings.total.toFixed(0)}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Commission Info */}
-            <Card className="border-0 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Payment Schedule</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Settlement Frequency</span>
-                  <span className="font-medium">Weekly</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Earnings are settled every Monday. Delivery fees and platform fees are collected by the platform. Commission is deducted from your order subtotal.
-                </p>
-              </CardContent>
-            </Card>
           </TabsContent>
+
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6">
-            <Card className="border-0 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  Shop Location
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Set your shop's GPS location so customers can see distance and get accurate delivery estimates.
-                </p>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium">Current Location</p>
-                    {restaurant?.lat && restaurant?.lng ? (
-                      <p className="text-xs text-accent flex items-center gap-1 mt-1">
-                        <MapPin className="w-3 h-3" />
-                        {Number(restaurant.lat).toFixed(4)}, {Number(restaurant.lng).toFixed(4)}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground mt-1">Not set</p>
-                    )}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={detectCurrentLocation}
-                    disabled={detectingLocation}
-                    className="gap-1"
-                  >
-                    {detectingLocation ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Navigation className="w-3 h-3" />
-                    )}
-                    Detect Location
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Latitude</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={restaurantForm.lat}
-                      onChange={(e) => setRestaurantForm({ ...restaurantForm, lat: e.target.value })}
-                      placeholder="12.9716"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Longitude</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={restaurantForm.lng}
-                      onChange={(e) => setRestaurantForm({ ...restaurantForm, lng: e.target.value })}
-                      placeholder="77.5946"
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  onClick={updateShopLocation}
-                  disabled={!restaurantForm.lat || !restaurantForm.lng}
-                  className="w-full"
-                >
-                  Save Location
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Delivery Areas Manager */}
+            {restaurant?.id && (
+              <RestaurantDeliveryPincodesManager restaurantId={restaurant.id} />
+            )}
 
             <Card className="border-0 shadow-sm">
               <CardHeader>
@@ -1322,17 +1293,87 @@ export default function RestaurantDashboard() {
                   <span className="text-sm text-muted-foreground">Address</span>
                   <span className="font-medium text-sm text-right max-w-[200px] truncate">{restaurant?.address}</span>
                 </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Pincode</span>
+                  <span className="font-medium">{restaurant?.pincode || 'Not Set'}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Locality</span>
+                  <span className="font-medium">{restaurant?.locality || 'Not Set'}</span>
+                </div>
+
                 <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                   <span className="text-sm text-muted-foreground">Verification Status</span>
                   <span className={`font-medium ${restaurant?.is_verified ? 'text-accent' : 'text-status-pending'}`}>
                     {restaurant?.is_verified ? 'Verified' : 'Pending'}
                   </span>
                 </div>
+
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full gap-2 mt-4" onClick={() => {
+                      if (restaurant) {
+                        setRestaurantForm({
+                          name: restaurant.name,
+                          description: restaurant.description || '',
+                          address: restaurant.address,
+                          phone: restaurant.phone || '',
+                          cuisine_type: restaurant.cuisine_type || '',
+                          image_url: restaurant.image_url || '',
+                          lat: restaurant.lat?.toString() || '',
+                          lng: restaurant.lng?.toString() || '',
+                          pincode: restaurant.pincode || '',
+                          locality: restaurant.locality || '',
+                        });
+                      }
+                    }}>
+                      <Edit className="w-4 h-4" />
+                      Edit Shop Details
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Edit Shop Details</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Pincode</Label>
+                          <Input
+                            placeholder="6-digit Pincode"
+                            value={restaurantForm.pincode}
+                            onChange={(e) => setRestaurantForm({ ...restaurantForm, pincode: e.target.value })}
+                            maxLength={6}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Locality</Label>
+                          <Input
+                            placeholder="Locality Area"
+                            value={restaurantForm.locality}
+                            onChange={(e) => setRestaurantForm({ ...restaurantForm, locality: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Full Address</Label>
+                        <Input
+                          value={restaurantForm.address}
+                          onChange={(e) => setRestaurantForm({ ...restaurantForm, address: e.target.value })}
+                        />
+                      </div>
+                      <Button className="w-full" onClick={updateShopLocation}>
+                        Save Shop Details
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </div >
   );
 }

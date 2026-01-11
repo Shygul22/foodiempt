@@ -15,13 +15,26 @@ interface LocationHeaderProps {
   onAddressChange: (address: string) => void;
 }
 
+interface PostalOffice {
+  Name: string;
+  District: string;
+  State: string;
+  Pincode: string;
+  Block?: string;
+  BranchType?: string;
+  Circle?: string;
+  Country?: string;
+  Division?: string;
+  Region?: string;
+}
+
 export function LocationHeader({ address, onAddressChange }: LocationHeaderProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState(address);
   const haptics = useHaptics();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchLoading, setIsSearchLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<any[]>([]); // To store suggestions if needed later, or just debug
+  const [searchResults, setSearchResults] = useState<PostalOffice[]>([]); // Typed search results
 
   const handleSearch = async () => {
     const query = searchQuery.trim();
@@ -52,7 +65,7 @@ export function LocationHeader({ address, onAddressChange }: LocationHeaderProps
     }
   };
 
-  const handleSelectLocation = (office: any) => {
+  const handleSelectLocation = (office: PostalOffice) => {
     const parts = [
       office.Name,
       office.District,
